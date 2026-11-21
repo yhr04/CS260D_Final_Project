@@ -18,12 +18,15 @@ def to_tensor_images(images_u8: np.ndarray, device) -> torch.Tensor:
 
 
 def boxes_to_mask(boxes: np.ndarray | torch.Tensor, H: int, W: int, device) -> torch.Tensor:
-    """(n,3) [y0,x0,side] -> (n,1,H,W) bool mask (True = occluded)."""
+    """(n,3) squares [y0,x0,side] or (n,4) rectangles [y0,x0,h,w] -> (n,1,H,W) bool
+    mask (True = occluded). side / h / w = 0 means no occlusion."""
     b = torch.as_tensor(np.asarray(boxes), dtype=torch.long, device=device)
-    y0, x0, s = b[:, 0].view(-1, 1, 1), b[:, 1].view(-1, 1, 1), b[:, 2].view(-1, 1, 1)
+    y0, x0 = b[:, 0].view(-1, 1, 1), b[:, 1].view(-1, 1, 1)
+    h = b[:, 2].view(-1, 1, 1)
+    w = b[:, 3].view(-1, 1, 1) if b.shape[1] == 4 else h
     ys = torch.arange(H, device=device).view(1, H, 1)
     xs = torch.arange(W, device=device).view(1, 1, W)
-    m = (ys >= y0) & (ys < y0 + s) & (xs >= x0) & (xs < x0 + s)
+    m = (ys >= y0) & (ys < y0 + h) & (xs >= x0) & (xs < x0 + w)
     return m.unsqueeze(1)
 
 

@@ -13,14 +13,21 @@ Project plan, experimental design and timeline: [`docs/PROJECT_PLAN.md`](docs/PR
 
 ## Status
 
-| Phase | Item | Status |
-|---|---|---|
-| 1 | Data, split, fixed occlusion masks | done |
-| 1 | Dense-Clean / Dense-Aug baselines | done (seed 42) |
-| 1 | Pruning (magnitude, Clean-Taylor, Occ-Taylor, OAGP) | next |
-| 2 | Sparsity sweep, alpha ablation, seeds | planned |
+Two-tier design (details in `docs/PROJECT_PLAN.md`):
+**main** benchmark = train on CASIA-WebFace (112×112), test on LFW face verification with clean and occluded pairs
+(the protocol used in the occluded-face-recognition literature, e.g. PDSN, FROM);
+**dev** benchmark = closed-set identification on 62 LFW identities, for fast development and multi-seed runs.
 
-## Dense baseline results (seed 42, test set, %)
+| Tier | Item | Status |
+|---|---|---|
+| dev | Data, split, fixed occlusion masks | done |
+| dev | Dense-Clean / Dense-Aug baselines | done (seed 42, 15 epochs; rerun with 25 epochs planned) |
+| dev | Pruning (magnitude, Clean/Occ/Mixed-Taylor, OAGP, OAGP-max) | next |
+| main | CASIA-WebFace download, memmap cache, held-out validation pairs, fixed occlusions (M0) | done |
+| main | CosFace Dense-Clean / Dense-Aug, LFW/AgeDB/CALFW/CPLFW clean + occluded verification (M1) | see `results/casia/` |
+| main | Pruning comparison, region occlusions, ablations | planned |
+
+## Dev-tier dense baseline results (seed 42, test set, %)
 
 | Method | Clean | Occ 10% | Occ 30% | Occ 50% |
 |---|---|---|---|---|
@@ -29,6 +36,19 @@ Project plan, experimental design and timeline: [`docs/PROJECT_PLAN.md`](docs/PR
 
 RTX 3070 Ti Laptop GPU, ~21 s of training per model. Balanced accuracy, robustness drop and diagnostics:
 `results/dense/*.json`, `results/baseline_table_seed42.csv`, `figures/`.
+
+## Main-tier dense baseline results (CASIA-WebFace -> LFW verification, seed 42, %)
+
+LFW 6000 pairs, standard 10-fold accuracy (mean ± std); the 2nd image of every pair is occluded.
+Squares = same distribution as training occlusion; regions = never seen in training.
+
+| Method | Best ep. | Clean | Sq 10% | Sq 30% | Sq 50% | Eyes | Mouth+nose | Upper half | Lower half |
+|---|---|---|---|---|---|---|---|---|---|
+| Dense-Clean | 18 | 98.88 ± 0.41 | 97.08 ± 0.56 | 83.73 ± 1.04 | 65.62 ± 1.61 | 92.77 ± 1.41 | 90.10 ± 1.84 | 92.00 ± 1.42 | 86.30 ± 2.80 |
+| Dense-Aug | 20 | 98.72 ± 0.44 | 98.77 ± 0.46 | 96.52 ± 0.54 | 90.65 ± 1.03 | 96.93 ± 0.41 | 96.02 ± 1.21 | 94.87 ± 0.89 | 94.83 ± 0.95 |
+
+ResNet-18 + CosFace, 20 epochs, ~42 / 54 min of training on an RTX 3070 Ti Laptop GPU. AgeDB-30 / CALFW / CPLFW,
+paired bootstrap CIs, TAR@FAR and gradient diagnostics: `results/casia/`, figures `figures/casia_dense_*`.
 
 ## Environment
 
@@ -56,7 +76,7 @@ pip install -r requirements.txt
 uv sync
 ```
 
-Check: `python -m pytest -q` (10 tests) and
+Check: `python -m pytest -q` (16 tests) and
 `python -c "import torch; print(torch.__version__, torch.cuda.is_available())"`.
 
 **Notebook kernel.** In VS Code open the **repository folder** itself, open a notebook, then
@@ -79,6 +99,16 @@ tables and logs are in English for the report.
 |---|---|
 | `notebooks/01_data_and_occlusion.ipynb` | downloads LFW, creates the split and fixed masks (`prepare_data`), inspects data and occlusion |
 | `notebooks/02_dense_baselines.ipynb` | trains Dense-Clean and Dense-Aug (`run_dense`), result table, figures, paired bootstrap, gradient diagnostics |
+| `notebooks/04_casia_data.ipynb` | main tier: download instructions, cache build, held-out split, fixed pair occlusions, throughput (`prepare_casia`) |
+| `notebooks/05_casia_dense.ipynb` | main tier: CosFace Dense-Clean / Dense-Aug on CASIA-WebFace (`run_face_dense`, resumable), LFW verification table, bootstrap |
+
+Main-tier data (~4.1 GB, no Kaggle login needed), kept zipped in `data/_downloads/`:
+```bash
+curl -L -o data/_downloads/webface.zip https://www.kaggle.com/api/v1/datasets/download/yakhyokhuja/webface-112x112
+curl -L -o data/_downloads/val.zip     https://www.kaggle.com/api/v1/datasets/download/yakhyokhuja/agedb-30-calfw-cplfw-lfw-aligned-112x112
+```
+Long main-tier runs can also be started from a terminal: `python -m occprune.casia_pipeline train --mode aug`
+(with `src` on `PYTHONPATH`); notebook and CLI call the same functions and share the resume checkpoint.
 
 All logic lives in `src/occprune/pipeline.py`. In notebook 02, `RETRAIN = True` retrains (otherwise saved
 results are reused). Hyper-parameters come from `configs/default.yaml` and can be overridden in the settings
@@ -87,7 +117,8 @@ cell (`cfg["train"]["epochs"] = 25`, ...). Other seeds: set `SEED = 43` (split, 
 ## Layout
 
 ```
-configs/default.yaml      every hyper-parameter in one place
+configs/default.yaml      every hyper-parameter of the dev tier
+configs/casia.yaml        every hyper-parameter of the main tier
 src/occprune/
   data.py                 LFW loading (sklearn), per-identity 70/15/15 split, split persistence
   occlusion.py            square-occlusion boxes: training sampler, fixed eval masks (NumPy only)
@@ -95,7 +126,10 @@ src/occprune/
   models.py               ResNet-18 (ImageNet weights), checkpoints, parameter counts
   train.py                shared training loop (also used for post-pruning fine-tuning)
   evaluate.py             accuracy / balanced accuracy per occlusion level, train-set gradient diagnostics
-  pipeline.py             experiment steps called by the notebooks
+  pipeline.py             experiment steps called by the notebooks (dev tier)
+  casia.py                main tier: zip -> uint8 memmap caches, held-out identity split + validation pairs
+  faceverif.py            main tier: ResNet-18 embedding net, CosFace head, pair occlusions, 10-fold verification
+  casia_pipeline.py       main tier: prepare / throughput / resumable training / evaluation / summary (+ CLI)
   utils.py                seeds, device, synchronised timers, config, JSON, env info
 notebooks/                main entry point (01 data & occlusion, 02 dense baselines, ...)
 tests/                    pytest quality checks

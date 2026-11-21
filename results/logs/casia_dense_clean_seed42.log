@@ -1,0 +1,210 @@
+02:28:20 | run casia_dense_clean_seed42 | device cuda | gpu NVIDIA GeForce RTX 3070 Ti Laptop GPU | torch 2.9.1+cu128
+02:28:21 | train 481210 images / 10361 identities | val 6000 pairs on 211 held-out identities | conditions ['clean', 'square10', 'square30', 'square50']
+02:28:54 | [clean] ep 01 step 200/1879 loss 34.2046 acc 0.0100 lr 0.0107 | 1563 img/s
+02:29:04 | [clean] ep 01 step 400/1879 loss 34.0425 acc 0.0213 lr 0.0213 | 4962 img/s
+02:29:14 | [clean] ep 01 step 600/1879 loss 33.5748 acc 0.0433 lr 0.0320 | 4952 img/s
+02:29:25 | [clean] ep 01 step 800/1879 loss 32.9813 acc 0.0711 lr 0.0426 | 4929 img/s
+02:29:35 | [clean] ep 01 step 1000/1879 loss 32.3133 acc 0.1018 lr 0.0533 | 4889 img/s
+02:29:46 | [clean] ep 01 step 1200/1879 loss 31.6274 acc 0.1331 lr 0.0639 | 4792 img/s
+02:29:56 | [clean] ep 01 step 1400/1879 loss 30.9651 acc 0.1637 lr 0.0746 | 4791 img/s
+02:30:07 | [clean] ep 01 step 1600/1879 loss 30.3162 acc 0.1934 lr 0.0852 | 4886 img/s
+02:30:17 | [clean] ep 01 step 1800/1879 loss 29.7216 acc 0.2204 lr 0.0958 | 4928 img/s
+02:30:28 | [clean] ep 01/20 loss 29.4994 train_acc 0.2304 | val clean 0.7495 square10 0.6752 square30 0.5455 square50 0.5163 | sel 0.6216 * | train 2.0 min, val 4s
+02:31:00 | [clean] ep 02 step 200/1879 loss 23.2273 acc 0.5128 lr 0.1000 | 1566 img/s
+02:31:11 | [clean] ep 02 step 400/1879 loss 22.9094 acc 0.5237 lr 0.1000 | 4967 img/s
+02:31:21 | [clean] ep 02 step 600/1879 loss 22.6442 acc 0.5338 lr 0.0999 | 4959 img/s
+02:31:31 | [clean] ep 02 step 800/1879 loss 22.3727 acc 0.5444 lr 0.0999 | 4945 img/s
+02:31:42 | [clean] ep 02 step 1000/1879 loss 22.1129 acc 0.5543 lr 0.0998 | 4950 img/s
+02:31:52 | [clean] ep 02 step 1200/1879 loss 21.8915 acc 0.5624 lr 0.0997 | 4954 img/s
+02:32:02 | [clean] ep 02 step 1400/1879 loss 21.6885 acc 0.5698 lr 0.0996 | 4943 img/s
+02:32:13 | [clean] ep 02 step 1600/1879 loss 21.4866 acc 0.5774 lr 0.0995 | 4927 img/s
+02:32:23 | [clean] ep 02 step 1800/1879 loss 21.3060 acc 0.5840 lr 0.0994 | 4926 img/s
+02:32:33 | [clean] ep 02/20 loss 21.2360 train_acc 0.5865 | val clean 0.8008 square10 0.7500 square30 0.6223 square50 0.5438 | sel 0.6793 * | train 2.0 min, val 4s
+02:33:06 | [clean] ep 03 step 200/1879 loss 18.5377 acc 0.6861 lr 0.0992 | 1570 img/s
+02:33:16 | [clean] ep 03 step 400/1879 loss 18.6057 acc 0.6825 lr 0.0990 | 4966 img/s
+02:33:27 | [clean] ep 03 step 600/1879 loss 18.6567 acc 0.6803 lr 0.0988 | 4952 img/s
+02:33:37 | [clean] ep 03 step 800/1879 loss 18.6646 acc 0.6793 lr 0.0986 | 4946 img/s
+02:33:47 | [clean] ep 03 step 1000/1879 loss 18.6298 acc 0.6803 lr 0.0984 | 4952 img/s
+02:33:58 | [clean] ep 03 step 1200/1879 loss 18.6037 acc 0.6804 lr 0.0982 | 4946 img/s
+02:34:08 | [clean] ep 03 step 1400/1879 loss 18.5420 acc 0.6817 lr 0.0979 | 4914 img/s
+02:34:19 | [clean] ep 03 step 1600/1879 loss 18.4936 acc 0.6826 lr 0.0977 | 4865 img/s
+02:34:29 | [clean] ep 03 step 1800/1879 loss 18.4450 acc 0.6840 lr 0.0974 | 4835 img/s
+02:34:40 | [clean] ep 03/20 loss 18.4228 train_acc 0.6844 | val clean 0.8230 square10 0.7743 square30 0.6107 square50 0.5347 | sel 0.6857 * | train 2.0 min, val 4s
+02:35:12 | [clean] ep 04 step 200/1879 loss 16.6385 acc 0.7392 lr 0.0970 | 1606 img/s
+02:35:22 | [clean] ep 04 step 400/1879 loss 16.8247 acc 0.7340 lr 0.0967 | 4950 img/s
+02:35:33 | [clean] ep 04 step 600/1879 loss 16.9322 acc 0.7300 lr 0.0964 | 4952 img/s
+02:35:43 | [clean] ep 04 step 800/1879 loss 16.9944 acc 0.7280 lr 0.0960 | 4950 img/s
+02:35:53 | [clean] ep 04 step 1000/1879 loss 17.0162 acc 0.7265 lr 0.0957 | 4948 img/s
+02:36:04 | [clean] ep 04 step 1200/1879 loss 17.0100 acc 0.7260 lr 0.0953 | 4922 img/s
+02:36:14 | [clean] ep 04 step 1400/1879 loss 16.9871 acc 0.7260 lr 0.0949 | 4905 img/s
+02:36:24 | [clean] ep 04 step 1600/1879 loss 16.9503 acc 0.7266 lr 0.0945 | 4902 img/s
+02:36:35 | [clean] ep 04 step 1800/1879 loss 16.9122 acc 0.7275 lr 0.0941 | 4832 img/s
+02:36:46 | [clean] ep 04/20 loss 16.8944 train_acc 0.7279 | val clean 0.8368 square10 0.7915 square30 0.6407 square50 0.5453 | sel 0.7036 * | train 2.0 min, val 4s
+02:37:18 | [clean] ep 05 step 200/1879 loss 15.5209 acc 0.7676 lr 0.0935 | 1610 img/s
+02:37:28 | [clean] ep 05 step 400/1879 loss 15.6873 acc 0.7627 lr 0.0931 | 4952 img/s
+02:37:38 | [clean] ep 05 step 600/1879 loss 15.7696 acc 0.7599 lr 0.0927 | 4946 img/s
+02:37:49 | [clean] ep 05 step 800/1879 loss 15.7975 acc 0.7580 lr 0.0922 | 4942 img/s
+02:37:59 | [clean] ep 05 step 1000/1879 loss 15.8400 acc 0.7567 lr 0.0917 | 4931 img/s
+02:38:09 | [clean] ep 05 step 1200/1879 loss 15.8557 acc 0.7558 lr 0.0912 | 4929 img/s
+02:38:20 | [clean] ep 05 step 1400/1879 loss 15.8812 acc 0.7547 lr 0.0907 | 4929 img/s
+02:38:30 | [clean] ep 05 step 1600/1879 loss 15.8786 acc 0.7545 lr 0.0902 | 4916 img/s
+02:38:41 | [clean] ep 05 step 1800/1879 loss 15.8620 acc 0.7547 lr 0.0897 | 4868 img/s
+02:38:51 | [clean] ep 05/20 loss 15.8616 train_acc 0.7547 | val clean 0.8552 square10 0.8150 square30 0.6525 square50 0.5682 | sel 0.7227 * | train 2.0 min, val 4s
+02:39:22 | [clean] ep 06 step 200/1879 loss 14.6344 acc 0.7888 lr 0.0889 | 1679 img/s
+02:39:32 | [clean] ep 06 step 400/1879 loss 14.8162 acc 0.7835 lr 0.0884 | 4958 img/s
+02:39:43 | [clean] ep 06 step 600/1879 loss 14.8939 acc 0.7817 lr 0.0878 | 4947 img/s
+02:39:53 | [clean] ep 06 step 800/1879 loss 14.9641 acc 0.7789 lr 0.0872 | 4912 img/s
+02:40:03 | [clean] ep 06 step 1000/1879 loss 15.0130 acc 0.7775 lr 0.0866 | 4929 img/s
+02:40:14 | [clean] ep 06 step 1200/1879 loss 15.0335 acc 0.7767 lr 0.0860 | 4925 img/s
+02:40:24 | [clean] ep 06 step 1400/1879 loss 15.0417 acc 0.7762 lr 0.0854 | 4919 img/s
+02:40:35 | [clean] ep 06 step 1600/1879 loss 15.0566 acc 0.7756 lr 0.0848 | 4930 img/s
+02:40:45 | [clean] ep 06 step 1800/1879 loss 15.0596 acc 0.7753 lr 0.0841 | 4933 img/s
+02:40:55 | [clean] ep 06/20 loss 15.0557 train_acc 0.7753 | val clean 0.8408 square10 0.7940 square30 0.6295 square50 0.5420 | sel 0.7016 | train 2.0 min, val 4s
+02:41:27 | [clean] ep 07 step 200/1879 loss 13.7565 acc 0.8109 lr 0.0832 | 1621 img/s
+02:41:37 | [clean] ep 07 step 400/1879 loss 13.9900 acc 0.8043 lr 0.0825 | 4931 img/s
+02:41:47 | [clean] ep 07 step 600/1879 loss 14.1418 acc 0.7995 lr 0.0819 | 4950 img/s
+02:41:58 | [clean] ep 07 step 800/1879 loss 14.2442 acc 0.7965 lr 0.0812 | 4941 img/s
+02:42:08 | [clean] ep 07 step 1000/1879 loss 14.2999 acc 0.7949 lr 0.0805 | 4917 img/s
+02:42:19 | [clean] ep 07 step 1200/1879 loss 14.3300 acc 0.7938 lr 0.0798 | 4919 img/s
+02:42:29 | [clean] ep 07 step 1400/1879 loss 14.3369 acc 0.7933 lr 0.0791 | 4924 img/s
+02:42:39 | [clean] ep 07 step 1600/1879 loss 14.3399 acc 0.7932 lr 0.0784 | 4904 img/s
+02:42:50 | [clean] ep 07 step 1800/1879 loss 14.3440 acc 0.7927 lr 0.0776 | 4816 img/s
+02:43:01 | [clean] ep 07/20 loss 14.3467 train_acc 0.7924 | val clean 0.8453 square10 0.8023 square30 0.6402 square50 0.5502 | sel 0.7095 | train 2.0 min, val 4s
+02:43:34 | [clean] ep 08 step 200/1879 loss 13.1285 acc 0.8234 lr 0.0766 | 1539 img/s
+02:43:45 | [clean] ep 08 step 400/1879 loss 13.3141 acc 0.8193 lr 0.0759 | 4952 img/s
+02:43:55 | [clean] ep 08 step 600/1879 loss 13.4507 acc 0.8153 lr 0.0751 | 4945 img/s
+02:44:05 | [clean] ep 08 step 800/1879 loss 13.5611 acc 0.8118 lr 0.0743 | 4933 img/s
+02:44:16 | [clean] ep 08 step 1000/1879 loss 13.6073 acc 0.8101 lr 0.0736 | 4930 img/s
+02:44:26 | [clean] ep 08 step 1200/1879 loss 13.6361 acc 0.8092 lr 0.0728 | 4929 img/s
+02:44:37 | [clean] ep 08 step 1400/1879 loss 13.6643 acc 0.8082 lr 0.0720 | 4905 img/s
+02:44:47 | [clean] ep 08 step 1600/1879 loss 13.6628 acc 0.8078 lr 0.0712 | 4912 img/s
+02:44:58 | [clean] ep 08 step 1800/1879 loss 13.6704 acc 0.8073 lr 0.0704 | 4817 img/s
+02:45:08 | [clean] ep 08/20 loss 13.6685 train_acc 0.8072 | val clean 0.8470 square10 0.7998 square30 0.6215 square50 0.5405 | sel 0.7022 | train 2.0 min, val 4s
+02:45:39 | [clean] ep 09 step 200/1879 loss 12.3444 acc 0.8390 lr 0.0693 | 1672 img/s
+02:45:49 | [clean] ep 09 step 400/1879 loss 12.6247 acc 0.8325 lr 0.0685 | 4959 img/s
+02:45:59 | [clean] ep 09 step 600/1879 loss 12.7800 acc 0.8285 lr 0.0676 | 4950 img/s
+02:46:10 | [clean] ep 09 step 800/1879 loss 12.8599 acc 0.8259 lr 0.0668 | 4937 img/s
+02:46:20 | [clean] ep 09 step 1000/1879 loss 12.9171 acc 0.8242 lr 0.0660 | 4937 img/s
+02:46:31 | [clean] ep 09 step 1200/1879 loss 12.9632 acc 0.8226 lr 0.0651 | 4912 img/s
+02:46:41 | [clean] ep 09 step 1400/1879 loss 12.9885 acc 0.8216 lr 0.0643 | 4918 img/s
+02:46:51 | [clean] ep 09 step 1600/1879 loss 13.0011 acc 0.8211 lr 0.0635 | 4909 img/s
+02:47:02 | [clean] ep 09 step 1800/1879 loss 13.0145 acc 0.8205 lr 0.0626 | 4917 img/s
+02:47:12 | [clean] ep 09/20 loss 13.0090 train_acc 0.8205 | val clean 0.8602 square10 0.8218 square30 0.6712 square50 0.5683 | sel 0.7304 * | train 2.0 min, val 4s
+02:47:44 | [clean] ep 10 step 200/1879 loss 11.7868 acc 0.8484 lr 0.0614 | 1609 img/s
+02:47:54 | [clean] ep 10 step 400/1879 loss 11.9328 acc 0.8456 lr 0.0606 | 4963 img/s
+02:48:04 | [clean] ep 10 step 600/1879 loss 12.0439 acc 0.8429 lr 0.0597 | 4954 img/s
+02:48:15 | [clean] ep 10 step 800/1879 loss 12.1417 acc 0.8406 lr 0.0588 | 4945 img/s
+02:48:25 | [clean] ep 10 step 1000/1879 loss 12.2200 acc 0.8385 lr 0.0580 | 4945 img/s
+02:48:35 | [clean] ep 10 step 1200/1879 loss 12.2655 acc 0.8369 lr 0.0571 | 4936 img/s
+02:48:46 | [clean] ep 10 step 1400/1879 loss 12.3008 acc 0.8360 lr 0.0562 | 4931 img/s
+02:48:56 | [clean] ep 10 step 1600/1879 loss 12.3181 acc 0.8353 lr 0.0554 | 4905 img/s
+02:49:07 | [clean] ep 10 step 1800/1879 loss 12.3343 acc 0.8345 lr 0.0545 | 4868 img/s
+02:49:18 | [clean] ep 10/20 loss 12.3297 train_acc 0.8345 | val clean 0.8653 square10 0.8327 square30 0.6952 square50 0.5707 | sel 0.7410 * | train 2.0 min, val 4s
+02:49:54 | [clean] ep 11 step 200/1879 loss 10.9644 acc 0.8650 lr 0.0533 | 1426 img/s
+02:50:04 | [clean] ep 11 step 400/1879 loss 11.1602 acc 0.8593 lr 0.0524 | 4947 img/s
+02:50:14 | [clean] ep 11 step 600/1879 loss 11.3051 acc 0.8565 lr 0.0515 | 4923 img/s
+02:50:25 | [clean] ep 11 step 800/1879 loss 11.4205 acc 0.8535 lr 0.0506 | 4920 img/s
+02:50:35 | [clean] ep 11 step 1000/1879 loss 11.5052 acc 0.8517 lr 0.0497 | 4907 img/s
+02:50:46 | [clean] ep 11 step 1200/1879 loss 11.5432 acc 0.8505 lr 0.0489 | 4910 img/s
+02:50:56 | [clean] ep 11 step 1400/1879 loss 11.5765 acc 0.8496 lr 0.0480 | 4912 img/s
+02:51:07 | [clean] ep 11 step 1600/1879 loss 11.5899 acc 0.8490 lr 0.0471 | 4904 img/s
+02:51:17 | [clean] ep 11 step 1800/1879 loss 11.6072 acc 0.8481 lr 0.0462 | 4913 img/s
+02:51:28 | [clean] ep 11/20 loss 11.6113 train_acc 0.8480 | val clean 0.8597 square10 0.8140 square30 0.6760 square50 0.5792 | sel 0.7322 | train 2.1 min, val 4s
+02:52:02 | [clean] ep 12 step 200/1879 loss 10.2439 acc 0.8764 lr 0.0450 | 1481 img/s
+02:52:13 | [clean] ep 12 step 400/1879 loss 10.4681 acc 0.8724 lr 0.0441 | 4946 img/s
+02:52:23 | [clean] ep 12 step 600/1879 loss 10.5872 acc 0.8694 lr 0.0432 | 4928 img/s
+02:52:33 | [clean] ep 12 step 800/1879 loss 10.6943 acc 0.8671 lr 0.0424 | 4924 img/s
+02:52:44 | [clean] ep 12 step 1000/1879 loss 10.7514 acc 0.8657 lr 0.0415 | 4921 img/s
+02:52:54 | [clean] ep 12 step 1200/1879 loss 10.7954 acc 0.8647 lr 0.0406 | 4902 img/s
+02:53:05 | [clean] ep 12 step 1400/1879 loss 10.8321 acc 0.8633 lr 0.0398 | 4914 img/s
+02:53:15 | [clean] ep 12 step 1600/1879 loss 10.8581 acc 0.8624 lr 0.0389 | 4907 img/s
+02:53:26 | [clean] ep 12 step 1800/1879 loss 10.8706 acc 0.8618 lr 0.0381 | 4908 img/s
+02:53:36 | [clean] ep 12/20 loss 10.8731 train_acc 0.8615 | val clean 0.8725 square10 0.8437 square30 0.7212 square50 0.5695 | sel 0.7517 * | train 2.1 min, val 5s
+02:54:12 | [clean] ep 13 step 200/1879 loss 9.4927 acc 0.8881 lr 0.0369 | 1451 img/s
+02:54:22 | [clean] ep 13 step 400/1879 loss 9.6619 acc 0.8840 lr 0.0360 | 4895 img/s
+02:54:33 | [clean] ep 13 step 600/1879 loss 9.7855 acc 0.8823 lr 0.0352 | 4890 img/s
+02:54:44 | [clean] ep 13 step 800/1879 loss 9.8846 acc 0.8799 lr 0.0343 | 4573 img/s
+02:54:55 | [clean] ep 13 step 1000/1879 loss 9.9540 acc 0.8786 lr 0.0335 | 4700 img/s
+02:55:05 | [clean] ep 13 step 1200/1879 loss 9.9923 acc 0.8777 lr 0.0327 | 4829 img/s
+02:55:16 | [clean] ep 13 step 1400/1879 loss 10.0301 acc 0.8766 lr 0.0319 | 4807 img/s
+02:55:27 | [clean] ep 13 step 1600/1879 loss 10.0471 acc 0.8759 lr 0.0310 | 4764 img/s
+02:55:37 | [clean] ep 13 step 1800/1879 loss 10.0680 acc 0.8751 lr 0.0302 | 4806 img/s
+02:55:48 | [clean] ep 13/20 loss 10.0781 train_acc 0.8749 | val clean 0.8623 square10 0.8188 square30 0.6650 square50 0.5530 | sel 0.7248 | train 2.1 min, val 4s
+02:56:23 | [clean] ep 14 step 200/1879 loss 8.7513 acc 0.8965 lr 0.0291 | 1477 img/s
+02:56:33 | [clean] ep 14 step 400/1879 loss 8.8857 acc 0.8943 lr 0.0283 | 4894 img/s
+02:56:44 | [clean] ep 14 step 600/1879 loss 9.0142 acc 0.8931 lr 0.0275 | 4903 img/s
+02:56:54 | [clean] ep 14 step 800/1879 loss 9.0648 acc 0.8921 lr 0.0267 | 4909 img/s
+02:57:05 | [clean] ep 14 step 1000/1879 loss 9.1067 acc 0.8913 lr 0.0260 | 4894 img/s
+02:57:15 | [clean] ep 14 step 1200/1879 loss 9.1451 acc 0.8903 lr 0.0252 | 4889 img/s
+02:57:26 | [clean] ep 14 step 1400/1879 loss 9.1736 acc 0.8897 lr 0.0244 | 4813 img/s
+02:57:36 | [clean] ep 14 step 1600/1879 loss 9.2005 acc 0.8890 lr 0.0237 | 4857 img/s
+02:57:47 | [clean] ep 14 step 1800/1879 loss 9.2135 acc 0.8885 lr 0.0229 | 4839 img/s
+02:57:58 | [clean] ep 14/20 loss 9.2171 train_acc 0.8885 | val clean 0.8802 square10 0.8372 square30 0.7038 square50 0.5602 | sel 0.7453 | train 2.1 min, val 4s
+02:58:39 | [clean] ep 15 step 200/1879 loss 7.9060 acc 0.9087 lr 0.0219 | 1260 img/s
+02:58:49 | [clean] ep 15 step 400/1879 loss 7.9728 acc 0.9081 lr 0.0212 | 4889 img/s
+02:59:00 | [clean] ep 15 step 600/1879 loss 8.1064 acc 0.9059 lr 0.0205 | 4887 img/s
+02:59:10 | [clean] ep 15 step 800/1879 loss 8.1533 acc 0.9052 lr 0.0198 | 4886 img/s
+02:59:21 | [clean] ep 15 step 1000/1879 loss 8.1992 acc 0.9044 lr 0.0191 | 4894 img/s
+02:59:31 | [clean] ep 15 step 1200/1879 loss 8.2459 acc 0.9033 lr 0.0184 | 4874 img/s
+02:59:42 | [clean] ep 15 step 1400/1879 loss 8.2691 acc 0.9026 lr 0.0177 | 4802 img/s
+02:59:52 | [clean] ep 15 step 1600/1879 loss 8.2873 acc 0.9023 lr 0.0170 | 4787 img/s
+03:00:03 | [clean] ep 15 step 1800/1879 loss 8.2936 acc 0.9020 lr 0.0164 | 4779 img/s
+03:00:15 | [clean] ep 15/20 loss 8.2916 train_acc 0.9020 | val clean 0.8833 square10 0.8477 square30 0.7138 square50 0.5835 | sel 0.7571 * | train 2.2 min, val 5s
+03:00:53 | [clean] ep 16 step 200/1879 loss 7.0317 acc 0.9196 lr 0.0155 | 1360 img/s
+03:01:03 | [clean] ep 16 step 400/1879 loss 7.0853 acc 0.9198 lr 0.0149 | 4933 img/s
+03:01:13 | [clean] ep 16 step 600/1879 loss 7.1164 acc 0.9191 lr 0.0142 | 4919 img/s
+03:01:24 | [clean] ep 16 step 800/1879 loss 7.1499 acc 0.9187 lr 0.0136 | 4922 img/s
+03:01:34 | [clean] ep 16 step 1000/1879 loss 7.1858 acc 0.9181 lr 0.0130 | 4922 img/s
+03:01:45 | [clean] ep 16 step 1200/1879 loss 7.2222 acc 0.9175 lr 0.0124 | 4911 img/s
+03:01:55 | [clean] ep 16 step 1400/1879 loss 7.2365 acc 0.9172 lr 0.0119 | 4917 img/s
+03:02:06 | [clean] ep 16 step 1600/1879 loss 7.2581 acc 0.9167 lr 0.0113 | 4853 img/s
+03:02:16 | [clean] ep 16 step 1800/1879 loss 7.2689 acc 0.9163 lr 0.0108 | 4731 img/s
+03:02:27 | [clean] ep 16/20 loss 7.2744 train_acc 0.9162 | val clean 0.8825 square10 0.8465 square30 0.7163 square50 0.5900 | sel 0.7588 * | train 2.1 min, val 4s
+03:03:01 | [clean] ep 17 step 200/1879 loss 6.0223 acc 0.9310 lr 0.0100 | 1534 img/s
+03:03:11 | [clean] ep 17 step 400/1879 loss 6.0256 acc 0.9312 lr 0.0095 | 4930 img/s
+03:03:22 | [clean] ep 17 step 600/1879 loss 6.0846 acc 0.9307 lr 0.0090 | 4777 img/s
+03:03:32 | [clean] ep 17 step 800/1879 loss 6.1205 acc 0.9305 lr 0.0085 | 4902 img/s
+03:03:43 | [clean] ep 17 step 1000/1879 loss 6.1564 acc 0.9300 lr 0.0080 | 4881 img/s
+03:03:53 | [clean] ep 17 step 1200/1879 loss 6.1772 acc 0.9298 lr 0.0075 | 4869 img/s
+03:04:04 | [clean] ep 17 step 1400/1879 loss 6.1919 acc 0.9296 lr 0.0071 | 4816 img/s
+03:04:15 | [clean] ep 17 step 1600/1879 loss 6.2085 acc 0.9293 lr 0.0066 | 4749 img/s
+03:04:26 | [clean] ep 17 step 1800/1879 loss 6.2141 acc 0.9290 lr 0.0062 | 4774 img/s
+03:04:37 | [clean] ep 17/20 loss 6.2125 train_acc 0.9289 | val clean 0.8888 square10 0.8587 square30 0.7383 square50 0.6103 | sel 0.7740 * | train 2.1 min, val 4s
+03:05:17 | [clean] ep 18 step 200/1879 loss 5.1323 acc 0.9409 lr 0.0056 | 1267 img/s
+03:05:28 | [clean] ep 18 step 400/1879 loss 5.1201 acc 0.9415 lr 0.0052 | 4931 img/s
+03:05:38 | [clean] ep 18 step 600/1879 loss 5.1295 acc 0.9415 lr 0.0048 | 4933 img/s
+03:05:48 | [clean] ep 18 step 800/1879 loss 5.1396 acc 0.9412 lr 0.0045 | 4922 img/s
+03:05:59 | [clean] ep 18 step 1000/1879 loss 5.1647 acc 0.9408 lr 0.0041 | 4908 img/s
+03:06:09 | [clean] ep 18 step 1200/1879 loss 5.1777 acc 0.9407 lr 0.0038 | 4897 img/s
+03:06:20 | [clean] ep 18 step 1400/1879 loss 5.1902 acc 0.9404 lr 0.0034 | 4910 img/s
+03:06:30 | [clean] ep 18 step 1600/1879 loss 5.1945 acc 0.9402 lr 0.0031 | 4858 img/s
+03:06:41 | [clean] ep 18 step 1800/1879 loss 5.1932 acc 0.9402 lr 0.0028 | 4787 img/s
+03:06:52 | [clean] ep 18/20 loss 5.1944 train_acc 0.9402 | val clean 0.8953 square10 0.8640 square30 0.7442 square50 0.6207 | sel 0.7810 * | train 2.2 min, val 4s
+03:07:29 | [clean] ep 19 step 200/1879 loss 4.3962 acc 0.9484 lr 0.0024 | 1388 img/s
+03:07:40 | [clean] ep 19 step 400/1879 loss 4.3772 acc 0.9487 lr 0.0022 | 4927 img/s
+03:07:50 | [clean] ep 19 step 600/1879 loss 4.3803 acc 0.9487 lr 0.0019 | 4921 img/s
+03:08:00 | [clean] ep 19 step 800/1879 loss 4.3974 acc 0.9486 lr 0.0017 | 4919 img/s
+03:08:11 | [clean] ep 19 step 1000/1879 loss 4.4003 acc 0.9483 lr 0.0015 | 4894 img/s
+03:08:21 | [clean] ep 19 step 1200/1879 loss 4.4086 acc 0.9482 lr 0.0013 | 4900 img/s
+03:08:32 | [clean] ep 19 step 1400/1879 loss 4.4110 acc 0.9482 lr 0.0011 | 4851 img/s
+03:08:43 | [clean] ep 19 step 1600/1879 loss 4.4040 acc 0.9483 lr 0.0009 | 4816 img/s
+03:08:53 | [clean] ep 19 step 1800/1879 loss 4.4066 acc 0.9482 lr 0.0007 | 4829 img/s
+03:09:04 | [clean] ep 19/20 loss 4.4092 train_acc 0.9481 | val clean 0.8917 square10 0.8572 square30 0.7362 square50 0.6108 | sel 0.7740 | train 2.1 min, val 4s
+03:09:38 | [clean] ep 20 step 200/1879 loss 4.0039 acc 0.9522 lr 0.0005 | 1507 img/s
+03:09:48 | [clean] ep 20 step 400/1879 loss 4.0143 acc 0.9521 lr 0.0004 | 4961 img/s
+03:09:59 | [clean] ep 20 step 600/1879 loss 4.0058 acc 0.9521 lr 0.0003 | 4947 img/s
+03:10:09 | [clean] ep 20 step 800/1879 loss 4.0155 acc 0.9518 lr 0.0002 | 4936 img/s
+03:10:19 | [clean] ep 20 step 1000/1879 loss 4.0083 acc 0.9519 lr 0.0001 | 4942 img/s
+03:10:30 | [clean] ep 20 step 1200/1879 loss 4.0050 acc 0.9520 lr 0.0001 | 4925 img/s
+03:10:40 | [clean] ep 20 step 1400/1879 loss 3.9980 acc 0.9521 lr 0.0000 | 4922 img/s
+03:10:51 | [clean] ep 20 step 1600/1879 loss 4.0011 acc 0.9522 lr 0.0000 | 4895 img/s
+03:11:01 | [clean] ep 20 step 1800/1879 loss 4.0002 acc 0.9522 lr 0.0000 | 4795 img/s
+03:11:12 | [clean] ep 20/20 loss 3.9999 train_acc 0.9522 | val clean 0.8957 square10 0.8673 square30 0.7418 square50 0.6053 | sel 0.7775 | train 2.1 min, val 4s
+03:11:12 | training done: best epoch 18 (val score 0.7810), pure train time 41.3 min
+03:11:18 | casia-val: clean 0.8953 | square10 0.8640 | square30 0.7442 | square50 0.6207
+03:11:26 | lfw: clean 98.88+-0.41 | square10 97.08+-0.56 | square30 83.73+-1.04 | square50 65.62+-1.61 | eyes 92.77+-1.41 | mouth_nose 90.10+-1.84 | upper_half 92.00+-1.42 | lower_half 86.30+-2.80
+03:11:34 | agedb_30: clean 89.20+-2.04 | square10 85.95+-1.76 | square30 70.45+-2.38 | square50 56.20+-1.94 | eyes 78.88+-2.21 | mouth_nose 76.42+-2.25 | upper_half 79.60+-2.10 | lower_half 70.73+-2.67
+03:11:42 | calfw: clean 90.92+-0.83 | square10 88.35+-1.19 | square30 75.78+-2.15 | square50 61.30+-1.30 | eyes 83.32+-1.87 | mouth_nose 81.92+-0.70 | upper_half 83.28+-1.60 | lower_half 76.12+-1.52
+03:11:51 | cplfw: clean 84.42+-2.03 | square10 78.47+-1.74 | square30 61.00+-1.37 | square50 51.97+-0.74 | eyes 72.60+-1.54 | mouth_nose 65.70+-2.49 | upper_half 72.58+-1.49 | lower_half 62.92+-1.68
+03:11:51 | diagnostics: train_clean_loss=3.765, train_clean_acc=0.9648, grad_norm_clean_mean=34.29, grad_norm_clean_std=5.069, train_occluded_loss=19.63, train_occluded_acc=0.582, grad_norm_occluded_mean=74.5, grad_norm_occluded_std=5.893, grad_norm_ratio_occ_over_clean=2.172, n_batches=8, batch_size=32
+03:11:53 | saved D:\Projects\CS260D_Final_Project\results\casia\casia_dense_clean_seed42.json

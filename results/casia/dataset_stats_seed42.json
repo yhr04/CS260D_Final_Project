@@ -1,0 +1,72 @@
+{
+  "casia": {
+    "source": "data/_downloads/webface.zip",
+    "n_images": 490623,
+    "n_identities": 10572,
+    "shape_hwc": [
+      112,
+      112,
+      3
+    ],
+    "images_per_identity": {
+      "min": 2,
+      "median": 27.0,
+      "mean": 46.4077752553916,
+      "max": 802
+    },
+    "first_entry": "webface_112x112/id_0/0_0.jpg",
+    "last_entry": "webface_112x112/id_10571/10571_490622.jpg"
+  },
+  "train_images": 481210,
+  "train_identities": 10361,
+  "holdout_identities": 211,
+  "holdout_images": 9413,
+  "val_pairs": 6000,
+  "val_positive_pairs": 3000,
+  "identities_with_lt5_images": 3,
+  "test_sets": {
+    "lfw": {
+      "pairs": 6000,
+      "positive": 3000
+    },
+    "agedb_30": {
+      "pairs": 6000,
+      "positive": 3000
+    },
+    "calfw": {
+      "pairs": 6000,
+      "positive": 3000
+    },
+    "cplfw": {
+      "pairs": 6000,
+      "positive": 3000
+    }
+  },
+  "region_rects_y0x0hw": {
+    "eyes": [
+      36,
+      18,
+      30,
+      76
+    ],
+    "mouth_nose": [
+      62,
+      14,
+      50,
+      84
+    ],
+    "upper_half": [
+      0,
+      0,
+      56,
+      112
+    ],
+    "lower_half": [
+      56,
+      0,
+      56,
+      112
+    ]
+  },
+  "seed": 42
+}
