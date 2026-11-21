@@ -1,0 +1,22 @@
+00:58:17 | run dense_aug_seed42 | device cuda | gpu NVIDIA GeForce RTX 3070 Ti Laptop GPU | torch 2.9.1+cu128
+00:58:18 | data (3023, 128, 128, 3) classes 62 | train 2121 val 451 test 451 | input 128px
+00:58:20 | [aug] ep 01/15 loss 3.0714 train_acc 0.312 | val@0% 0.596 val@10% 0.523 val@30% 0.412 val@50% 0.268 | sel 0.4501 * | 1.3s
+00:58:21 | [aug] ep 02/15 loss 1.3890 train_acc 0.676 | val@0% 0.774 val@10% 0.710 val@30% 0.590 val@50% 0.397 | sel 0.6175 * | 1.3s
+00:58:23 | [aug] ep 03/15 loss 0.6272 train_acc 0.858 | val@0% 0.876 val@10% 0.807 val@30% 0.710 val@50% 0.463 | sel 0.7140 * | 1.3s
+00:58:25 | [aug] ep 04/15 loss 0.3048 train_acc 0.938 | val@0% 0.911 val@10% 0.838 val@30% 0.772 val@50% 0.492 | sel 0.7533 * | 1.3s
+00:58:26 | [aug] ep 05/15 loss 0.1966 train_acc 0.965 | val@0% 0.902 val@10% 0.854 val@30% 0.763 val@50% 0.514 | sel 0.7583 * | 1.3s
+00:58:28 | [aug] ep 06/15 loss 0.1309 train_acc 0.978 | val@0% 0.938 val@10% 0.871 val@30% 0.796 val@50% 0.508 | sel 0.7783 * | 1.3s
+00:58:30 | [aug] ep 07/15 loss 0.1064 train_acc 0.981 | val@0% 0.916 val@10% 0.889 val@30% 0.789 val@50% 0.559 | sel 0.7882 * | 1.3s
+00:58:31 | [aug] ep 08/15 loss 0.0797 train_acc 0.985 | val@0% 0.927 val@10% 0.902 val@30% 0.800 val@50% 0.599 | sel 0.8071 * | 1.4s
+00:58:33 | [aug] ep 09/15 loss 0.0581 train_acc 0.992 | val@0% 0.938 val@10% 0.905 val@30% 0.803 val@50% 0.601 | sel 0.8115 * | 1.4s
+00:58:35 | [aug] ep 10/15 loss 0.0490 train_acc 0.993 | val@0% 0.933 val@10% 0.900 val@30% 0.820 val@50% 0.610 | sel 0.8160 * | 1.5s
+00:58:37 | [aug] ep 11/15 loss 0.0433 train_acc 0.994 | val@0% 0.938 val@10% 0.889 val@30% 0.818 val@50% 0.616 | sel 0.8154 | 1.5s
+00:58:39 | [aug] ep 12/15 loss 0.0419 train_acc 0.993 | val@0% 0.938 val@10% 0.900 val@30% 0.834 val@50% 0.619 | sel 0.8226 * | 1.4s
+00:58:40 | [aug] ep 13/15 loss 0.0343 train_acc 0.993 | val@0% 0.938 val@10% 0.905 val@30% 0.838 val@50% 0.625 | sel 0.8265 * | 1.4s
+00:58:42 | [aug] ep 14/15 loss 0.0450 train_acc 0.993 | val@0% 0.933 val@10% 0.902 val@30% 0.831 val@50% 0.643 | sel 0.8276 * | 1.4s
+00:58:44 | [aug] ep 15/15 loss 0.0348 train_acc 0.994 | val@0% 0.938 val@10% 0.907 val@30% 0.825 val@50% 0.639 | sel 0.8271 | 1.5s
+00:58:44 | training done: best epoch 14 (val score 0.8276), pure train time 20.8s, wall 25.7s
+00:58:46 | val: 0%: acc 0.9335 bal 0.8827 | 10%: acc 0.9024 bal 0.8337 | 30%: acc 0.8315 bal 0.7435 | 50%: acc 0.6430 bal 0.5370
+00:58:46 | test: 0%: acc 0.9313 bal 0.8741 | 10%: acc 0.9268 bal 0.8799 | 30%: acc 0.8551 bal 0.7775 | 50%: acc 0.6452 bal 0.5266
+00:58:46 | diagnostics: train_clean_acc=1, train_clean_loss=0.004928, train_occluded_acc=0.9948, train_occluded_loss=0.03904, grad_norm_clean_mean=0.4163, grad_norm_clean_std=0.1392, grad_norm_occluded_mean=8.388, grad_norm_occluded_std=5.205, grad_batch_size=16, n_grad_batches=8
+00:58:46 | saved D:\Projects\CS260D_Final_Project\results\dense\dense_aug_seed42.json

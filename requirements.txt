@@ -1,0 +1,24 @@
+# CS 260D occlusion-aware pruning - pinned to the versions of the reference run
+# (Python 3.12, Windows 11, RTX 3070 Ti, CUDA 12.8). Recommended: Python 3.12.
+#
+# NVIDIA GPU (Windows / Linux): install the CUDA build of PyTorch FIRST, then this file:
+#   pip install torch==2.9.1 torchvision==0.24.1 --index-url https://download.pytorch.org/whl/cu128
+#   pip install -r requirements.txt
+# macOS or CPU-only: just  pip install -r requirements.txt
+#
+# ("torch==2.9.1" below is also satisfied by the CUDA build "2.9.1+cu128".)
+
+torch==2.9.1
+torchvision==0.24.1
+numpy==2.5.5
+scikit-learn==1.9.1
+pandas==3.1.1
+matplotlib==3.11.2
+pyyaml==6.0.4
+pillow==13.0.0
+tqdm==4.70.1
+
+# notebooks and tests
+ipykernel==7.4.0
+ipywidgets==8.1.9
+pytest==9.2.0

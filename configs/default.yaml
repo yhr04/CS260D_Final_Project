@@ -1,0 +1,44 @@
+# Default configuration for the CS 260D occlusion-aware pruning project.
+# All experiments read this file; command-line flags only override a few fields.
+
+seed: 42                      # split seed AND training seed for a run
+
+data:
+  data_dir: data              # sklearn LFW download + cached arrays (git-ignored)
+  min_faces_per_person: 20    # -> closed-set identification over the selected identities
+  funneled: true
+  # Crop (y0, y1, x0, x1) inside the 250x250 funneled image.
+  # sklearn's default crop is (70:195, 78:172) = 125x94 (non-square).
+  # We use a 128x128 square crop with the same centre, so the network sees the
+  # native resolution without anisotropic stretching.
+  crop: [68, 196, 61, 189]
+  resize: 1.0                 # sklearn resize factor (1.0 = native pixels)
+  split: [0.70, 0.15, 0.15]   # per-identity train / val / test fractions
+  img_size: 128               # network input size; 224 = upsample like the original plan
+
+occlusion:
+  fill: 0.0                   # black patch, applied in [0,1] pixel space BEFORE normalisation
+  train_prob: 0.5             # Dense-Aug: probability that a training image is occluded
+  train_ratio: [0.10, 0.30]   # Dense-Aug: patch area / image area ~ U(0.10, 0.30)
+  eval_ratios: [0.0, 0.10, 0.30, 0.50]
+  eval_repeats_val: 1         # masks per image per level on validation (model selection)
+  eval_repeats_test: 3        # masks per image per level on test (averaged)
+  val_seed: 1001              # independent, fixed seeds for evaluation masks
+  test_seed: 2002
+  diag_seed: 3003             # masks for training-set diagnostics
+
+train:
+  epochs: 15
+  batch_size: 32
+  eval_batch_size: 128
+  optimizer: adamw
+  lr_backbone: 1.0e-4
+  lr_head: 1.0e-3
+  weight_decay: 0.01          # not applied to BatchNorm parameters or biases
+  scheduler: cosine           # per-step cosine decay to 0
+  hflip: true                 # only mild augmentation (horizontal flip)
+  # Model selection (same rule for every model): epoch with the highest mean
+  # validation accuracy over all eval_ratios. Test data is never used for selection.
+  select_metric: val_mean_acc
+  device: auto                # auto | cuda | cpu | mps
+  deterministic: true
