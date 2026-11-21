@@ -1,152 +1,237 @@
-"""LFW-funneled loading, identity-stratified splitting and split persistence.
+"""Data: CASIA-WebFace (training) and the verification-pair test sets
+(LFW, AgeDB-30, CALFW, CPLFW), all 112x112 aligned RGB.
 
-Images are kept in memory as uint8 arrays of shape (N, H, W, 3). The dataset is
-small (~3k images at 128x128), so no DataLoader / worker processes are needed,
-which also avoids Windows multiprocessing issues.
+Both Kaggle archives are read directly from their zip files and decoded once into
+uint8 caches under data/cache (git-ignored):
+
+    casia_112.npy            (N, 112, 112, 3) uint8 memmap, ~18.5 GB, sorted by identity
+    casia_labels.npy         (N,) int32 identity index (0..10571, folder id_<k> -> k)
+    pairs_<name>.npz         images (12000, 112, 112, 3) uint8, issame (6000,) bool
+
+Archive layout (checked 2026-11-21):
+    webface.zip: webface_112x112/id_<k>/<k>_<j>.jpg          490,623 images, 10,572 identities
+    val.zip:     val/<name>_112x112/<i>.bmp + val/<name>_ann.txt
+                 ann line t: "<issame> <name>_112x112/<2t>.bmp <name>_112x112/<2t+1>.bmp";
+                 6000 pairs = 10 consecutive folds of 600 (300 positive, then 300 negative).
 """
 from __future__ import annotations
 
-import hashlib
+import io
+import json
+import re
+import zipfile
+from concurrent.futures import ProcessPoolExecutor
 
 import numpy as np
 
-from .utils import ensure_dir, load_json, resolve, save_json
+from .utils import ensure_dir, resolve
+
+H = W = 112
+_ID_RE = re.compile(r"id_(\d+)/(\d+)_(\d+)\.jpg$")
 
 
-# --------------------------------------------------------------------------- loading
-def _cache_name(dcfg: dict) -> str:
-    y0, y1, x0, x1 = dcfg["crop"]
-    tag = (
-        f"lfw_f{int(dcfg['funneled'])}_min{dcfg['min_faces_per_person']}"
-        f"_crop{y0}-{y1}-{x0}-{x1}_r{dcfg['resize']}"
-    )
-    return tag + ".npz"
+# =============================================================================
+# CASIA-WebFace cache
+# =============================================================================
+def casia_paths(cache_dir) -> dict:
+    d = resolve(cache_dir)
+    return {"images": d / "casia_112.npy", "labels": d / "casia_labels.npy", "meta": d / "casia_meta.json"}
 
 
-def load_lfw(dcfg: dict, verbose: bool = True) -> dict:
-    """Load LFW via scikit-learn (downloads once) and cache a uint8 copy.
+def _list_webface(zip_path) -> tuple[list[str], np.ndarray]:
+    with zipfile.ZipFile(resolve(zip_path)) as z:
+        names = [n for n in z.namelist() if n.lower().endswith(".jpg")]
+    keyed = []
+    for n in names:
+        m = _ID_RE.search(n)
+        if m is None:
+            raise ValueError(f"unexpected entry {n}")
+        keyed.append((int(m.group(1)), int(m.group(3)), n))
+    keyed.sort()
+    return [k[2] for k in keyed], np.array([k[0] for k in keyed], dtype=np.int32)
 
-    Returns dict with keys: images (N,H,W,3 uint8), labels (N, int64),
-    target_names (list[str]).
-    """
-    data_dir = ensure_dir(dcfg["data_dir"])
-    cache = data_dir / _cache_name(dcfg)
-    if cache.exists():
-        z = np.load(cache, allow_pickle=False)
-        out = {
-            "images": z["images"],
-            "labels": z["labels"].astype(np.int64),
-            "target_names": [str(s) for s in z["target_names"]],
-        }
+
+def _decode_chunk(args) -> int:
+    """Worker: decode zip entries [start, start+len(names)) into the memmap."""
+    from PIL import Image
+
+    zip_path, out_path, start, names = args
+    out = np.load(out_path, mmap_mode="r+")
+    with zipfile.ZipFile(zip_path) as z:
+        for i, n in enumerate(names):
+            im = Image.open(io.BytesIO(z.read(n))).convert("RGB")
+            a = np.asarray(im)
+            if a.shape != (H, W, 3):
+                raise ValueError(f"{n}: shape {a.shape}")
+            out[start + i] = a
+    out.flush()
+    del out
+    return len(names)
+
+
+def build_casia_cache(zip_path, cache_dir, workers: int = 12, chunk: int = 4000, verbose: bool = True) -> dict:
+    """Decode every CASIA image once into a uint8 .npy memmap (idempotent)."""
+    p = casia_paths(cache_dir)
+    if p["meta"].exists():
+        meta = json.loads(p["meta"].read_text(encoding="utf-8"))
         if verbose:
-            print(f"[data] loaded cached arrays from {cache}")
-        return out
-
-    from sklearn.datasets import fetch_lfw_people
-
-    y0, y1, x0, x1 = dcfg["crop"]
+            print(f"[casia] cache exists: {meta['n_images']} images, {meta['n_identities']} identities -> {p['images']}")
+        return meta
+    ensure_dir(cache_dir)
+    names, labels = _list_webface(zip_path)
+    n = len(names)
     if verbose:
-        print("[data] fetching LFW with scikit-learn (first run downloads ~230 MB) ...")
-    lfw = fetch_lfw_people(
-        data_home=str(data_dir / "sklearn"),
-        funneled=dcfg["funneled"],
-        min_faces_per_person=dcfg["min_faces_per_person"],
-        resize=dcfg["resize"],
-        color=True,
-        slice_=(slice(y0, y1), slice(x0, x1)),
-        download_if_missing=True,
-    )
-    imgs = lfw.images.astype(np.float32)
-    # sklearn has returned both [0,1] and [0,255] floats across versions.
-    if imgs.max() <= 1.5:
-        imgs = imgs * 255.0
-    images = np.clip(np.rint(imgs), 0, 255).astype(np.uint8)
-    labels = lfw.target.astype(np.int64)
-    names = [str(s) for s in lfw.target_names]
-    np.savez_compressed(cache, images=images, labels=labels, target_names=np.array(names))
+        print(f"[casia] decoding {n} images ({len(np.unique(labels))} identities) with {workers} processes "
+              f"-> {p['images']} ({n * H * W * 3 / 1e9:.1f} GB)")
+    arr = np.lib.format.open_memmap(p["images"], mode="w+", dtype=np.uint8, shape=(n, H, W, 3))
+    del arr
+    jobs = [(str(resolve(zip_path)), str(p["images"]), s, names[s : s + chunk]) for s in range(0, n, chunk)]
+    done = 0
+    with ProcessPoolExecutor(max_workers=workers) as ex:
+        for k in ex.map(_decode_chunk, jobs):
+            done += k
+            if verbose and (done // chunk) % 20 == 0:
+                print(f"  {done}/{n}", flush=True)
+    # identity id_<k> -> label k; ids are contiguous 0..K-1 in this archive, check it
+    uniq = np.unique(labels)
+    if not np.array_equal(uniq, np.arange(len(uniq))):
+        labels = np.searchsorted(uniq, labels).astype(np.int32)
+    np.save(p["labels"], labels)
+    counts = np.bincount(labels)
+    meta = {
+        "source": str(zip_path),
+        "n_images": int(n),
+        "n_identities": int(len(uniq)),
+        "shape_hwc": [H, W, 3],
+        "images_per_identity": {"min": int(counts.min()), "median": float(np.median(counts)),
+                                "mean": float(counts.mean()), "max": int(counts.max())},
+        "first_entry": names[0],
+        "last_entry": names[-1],
+    }
+    p["meta"].write_text(json.dumps(meta, indent=2), encoding="utf-8")
     if verbose:
-        print(f"[data] cached arrays to {cache}")
-    return {"images": images, "labels": labels, "target_names": names}
+        print(f"[casia] done: {meta}")
+    return meta
 
 
-def dataset_fingerprint(labels: np.ndarray, images: np.ndarray | None = None) -> str:
-    h = hashlib.sha1(np.ascontiguousarray(labels).tobytes())
-    if images is not None:
-        h.update(str(images.shape).encode())
-        h.update(np.ascontiguousarray(images[:: max(1, len(images) // 50)]).tobytes())
-    return h.hexdigest()[:16]
+def load_casia(cache_dir) -> tuple[np.ndarray, np.ndarray]:
+    """(images memmap (N,112,112,3) uint8 read-only, labels (N,) int64)."""
+    p = casia_paths(cache_dir)
+    return np.load(p["images"], mmap_mode="r"), np.load(p["labels"]).astype(np.int64)
 
 
-def class_counts(labels: np.ndarray, num_classes: int | None = None) -> np.ndarray:
-    return np.bincount(labels, minlength=num_classes or int(labels.max()) + 1)
+# =============================================================================
+# held-out identities -> validation pairs (model selection, never LFW)
+# =============================================================================
+def casia_split_path(seed: int):
+    return resolve(f"results/splits/split_seed{seed}.npz")
 
 
-# --------------------------------------------------------------------------- splitting
-def stratified_split(labels: np.ndarray, fractions=(0.70, 0.15, 0.15), seed: int = 42) -> dict:
-    """Per-identity split of ORIGINAL image indices into train / val / test.
+def make_casia_split(labels: np.ndarray, frac: float, min_images: int, pairs_per_class: int, seed: int) -> dict:
+    """Hold out `frac` of the identities (among those with >= min_images) and build
+    `pairs_per_class` positive + negative verification pairs on their images.
 
-    For every identity with n images: n_val = max(1, round(f_val * n)),
-    n_test = max(1, round(f_test * n)), the rest go to train. This guarantees
-    every identity appears in all three subsets (requires n >= 3).
+    Pairs are arranged in 10 folds of (pos/10 positive, neg/10 negative), like LFW.
+    Returns holdout_ids, val_pairs (P,2) image indices, val_issame (P,), fold (P,).
     """
-    labels = np.asarray(labels)
-    f_train, f_val, f_test = fractions
-    assert abs(f_train + f_val + f_test - 1.0) < 1e-6, "fractions must sum to 1"
-    rng = np.random.default_rng(seed)
-    tr, va, te = [], [], []
-    for c in np.unique(labels):
-        idx = np.flatnonzero(labels == c)
-        n = len(idx)
-        if n < 3:
-            raise ValueError(f"class {c} has only {n} images; need >= 3 for a 3-way split")
-        idx = rng.permutation(idx)
-        n_val = max(1, int(round(f_val * n)))
-        n_test = max(1, int(round(f_test * n)))
-        if n - n_val - n_test < 1:
-            raise ValueError(f"class {c}: not enough images left for training")
-        va.append(idx[:n_val])
-        te.append(idx[n_val : n_val + n_test])
-        tr.append(idx[n_val + n_test :])
+    rng = np.random.default_rng([seed, 260])
+    counts = np.bincount(labels)
+    eligible = np.flatnonzero(counts >= min_images)
+    n_hold = int(round(frac * len(counts)))
+    holdout = np.sort(rng.choice(eligible, size=n_hold, replace=False))
+    by_id = {int(c): np.flatnonzero(labels == c) for c in holdout}
+
+    pos, seen = [], set()
+    while len(pos) < pairs_per_class:
+        c = int(rng.choice(holdout))
+        a, b = rng.choice(by_id[c], size=2, replace=False)
+        key = (min(a, b), max(a, b))
+        if key not in seen:
+            seen.add(key)
+            pos.append(key)
+    neg = []
+    while len(neg) < pairs_per_class:
+        c1, c2 = rng.choice(holdout, size=2, replace=False)
+        a, b = int(rng.choice(by_id[int(c1)])), int(rng.choice(by_id[int(c2)]))
+        key = (min(a, b), max(a, b))
+        if key not in seen:
+            seen.add(key)
+            neg.append(key)
+    n_folds = 10
+    pf, nf = pairs_per_class // n_folds, pairs_per_class // n_folds
+    pairs, issame, fold = [], [], []
+    for k in range(n_folds):
+        pairs += pos[k * pf : (k + 1) * pf] + neg[k * nf : (k + 1) * nf]
+        issame += [True] * pf + [False] * nf
+        fold += [k] * (pf + nf)
     return {
-        "train": np.sort(np.concatenate(tr)),
-        "val": np.sort(np.concatenate(va)),
-        "test": np.sort(np.concatenate(te)),
+        "holdout_ids": holdout.astype(np.int32),
+        "val_pairs": np.array(pairs, dtype=np.int64),
+        "val_issame": np.array(issame, dtype=bool),
+        "fold": np.array(fold, dtype=np.int8),
+        "seed": np.array(seed),
     }
 
 
-def check_split(split: dict, labels: np.ndarray) -> None:
-    """Quality checks: disjoint original images, full coverage, every class everywhere."""
-    s = {k: set(map(int, v)) for k, v in split.items()}
-    assert not (s["train"] & s["val"]), "train/val overlap"
-    assert not (s["train"] & s["test"]), "train/test overlap"
-    assert not (s["val"] & s["test"]), "val/test overlap"
-    assert len(s["train"] | s["val"] | s["test"]) == len(labels), "split does not cover all images"
-    all_classes = set(np.unique(labels).tolist())
-    for k, v in split.items():
-        missing = all_classes - set(np.unique(labels[v]).tolist())
-        assert not missing, f"{k} split misses classes {sorted(missing)[:5]}"
+def save_casia_split(split: dict, seed: int) -> None:
+    p = casia_split_path(seed)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    np.savez_compressed(p, **split)
 
 
-def split_path(seed: int):
-    return resolve(f"results/splits/split_seed{seed}.json")
+def load_casia_split(seed: int) -> dict:
+    z = np.load(casia_split_path(seed), allow_pickle=False)
+    return {k: z[k] for k in z.files}
 
 
-def save_split(split: dict, labels: np.ndarray, seed: int, fractions) -> None:
-    save_json(
-        {
-            "seed": seed,
-            "fractions": list(fractions),
-            "n_total": int(len(labels)),
-            "label_fingerprint": dataset_fingerprint(labels),
-            **{k: np.asarray(v).tolist() for k, v in split.items()},
-        },
-        split_path(seed),
-    )
+def train_indices_and_labels(labels: np.ndarray, holdout_ids: np.ndarray) -> tuple[np.ndarray, np.ndarray, int]:
+    """Training image indices and their labels remapped to 0..C_train-1."""
+    keep = ~np.isin(labels, holdout_ids)
+    idx = np.flatnonzero(keep)
+    train_ids = np.setdiff1d(np.unique(labels), holdout_ids)
+    remap = np.full(labels.max() + 1, -1, dtype=np.int64)
+    remap[train_ids] = np.arange(len(train_ids))
+    return idx, remap[labels], len(train_ids)
 
 
-def load_split(seed: int, labels: np.ndarray | None = None) -> dict:
-    d = load_json(split_path(seed))
-    if labels is not None:
-        assert d["n_total"] == len(labels), "saved split was made for a different dataset size"
-        assert d["label_fingerprint"] == dataset_fingerprint(labels), "label fingerprint mismatch"
-    return {k: np.asarray(d[k], dtype=np.int64) for k in ("train", "val", "test")}
+def check_casia_split(split: dict, labels: np.ndarray) -> None:
+    hold = set(split["holdout_ids"].tolist())
+    pl = labels[split["val_pairs"]]
+    assert all(int(c) in hold for c in pl.ravel()), "validation pair uses a training identity"
+    assert np.array_equal(pl[:, 0] == pl[:, 1], split["val_issame"]), "issame does not match identities"
+    assert (split["val_pairs"][:, 0] != split["val_pairs"][:, 1]).all()
+    assert len({tuple(p) for p in split["val_pairs"].tolist()}) == len(split["val_pairs"]), "duplicate pairs"
+
+
+# =============================================================================
+# verification test sets (LFW etc.)
+# =============================================================================
+def pairs_cache_path(cache_dir, name: str):
+    return resolve(cache_dir) / f"pairs_{name}.npz"
+
+
+def build_pairs_cache(zip_path, cache_dir, name: str) -> dict:
+    p = pairs_cache_path(cache_dir, name)
+    if p.exists():
+        return load_pairs(cache_dir, name)
+    from PIL import Image
+
+    ensure_dir(cache_dir)
+    with zipfile.ZipFile(resolve(zip_path)) as z:
+        lines = z.read(f"val/{name}_ann.txt").decode().split()
+        rows = [lines[i : i + 3] for i in range(0, len(lines), 3)]
+        issame = np.array([r[0] == "1" for r in rows], dtype=bool)
+        files = []
+        for t, (_, a, b) in enumerate(rows):
+            # images are stored in pair order: pair t = (2t, 2t+1)
+            assert a.endswith(f"/{2 * t}.bmp") and b.endswith(f"/{2 * t + 1}.bmp"), (t, a, b)
+            files += [a, b]
+        imgs = np.stack([np.asarray(Image.open(io.BytesIO(z.read("val/" + f))).convert("RGB")) for f in files])
+    assert imgs.shape[1:] == (H, W, 3)
+    np.savez(p, images=imgs, issame=issame)
+    return {"images": imgs, "issame": issame}
+
+
+def load_pairs(cache_dir, name: str) -> dict:
+    z = np.load(pairs_cache_path(cache_dir, name), allow_pickle=False)
+    return {"images": z["images"], "issame": z["issame"]}

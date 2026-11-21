@@ -1,7 +1,7 @@
 [project]
 name = "occprune"
 version = "0.1.0"
-description = "CS 260D final project: occlusion-aware gradient pruning for robust face identification"
+description = "CS 260D final project: occlusion-aware gradient pruning for robust face verification"
 readme = "README.md"
 requires-python = ">=3.10,<3.14"
 dependencies = [

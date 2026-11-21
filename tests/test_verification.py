@@ -1,8 +1,8 @@
-"""Quality checks for the main tier (CASIA-WebFace -> LFW verification). CPU only, no data needed."""
+"""Quality checks for the CASIA split, CosFace and the LFW verification protocol. CPU only, no data needed."""
 import numpy as np
 import torch
 
-from occprune.casia import check_casia_split, make_casia_split, train_indices_and_labels
+from occprune.data import check_casia_split, make_casia_split, train_indices_and_labels
 from occprune.faceverif import REGION_RECTS, CosFaceHead, best_threshold, pair_conditions, verification_metrics
 from occprune.transforms import boxes_to_mask
 

@@ -1,72 +1,25 @@
-"""Quality checks for splitting and occlusion (run: python -m pytest -q)."""
+"""Quality checks for synthetic occlusion and preprocessing (run: python -m pytest -q)."""
 import numpy as np
 import pytest
 
-from occprune.data import check_split, stratified_split
 from occprune.occlusion import (
     apply_boxes_np,
     boxes_to_mask_np,
-    make_eval_boxes,
     patch_side,
     sample_train_boxes,
 )
 
 
-def _labels():
-    rng = np.random.default_rng(0)
-    counts = rng.integers(20, 120, size=15)
-    return np.repeat(np.arange(15), counts)
-
-
-# ------------------------------------------------------------------ split
-def test_split_disjoint_complete_and_stratified():
-    y = _labels()
-    s = stratified_split(y, (0.7, 0.15, 0.15), seed=42)
-    check_split(s, y)  # disjoint, full coverage, every class in every subset
-    for c in np.unique(y):
-        n = (y == c).sum()
-        assert (y[s["val"]] == c).sum() == max(1, round(0.15 * n))
-        assert (y[s["test"]] == c).sum() == max(1, round(0.15 * n))
-
-
-def test_split_is_deterministic_and_seed_dependent():
-    y = _labels()
-    a, b = stratified_split(y, seed=42), stratified_split(y, seed=42)
-    c = stratified_split(y, seed=43)
-    assert all(np.array_equal(a[k], b[k]) for k in a)
-    assert not np.array_equal(a["test"], c["test"])
-
-
-def test_split_rejects_tiny_classes():
-    with pytest.raises(ValueError):
-        stratified_split(np.array([0, 0, 1, 1, 1, 1]), seed=0)
-
-
 # ------------------------------------------------------------------ occlusion
 @pytest.mark.parametrize("ratio", [0.1, 0.3, 0.5])
 def test_patch_area_close_to_ratio(ratio):
-    H = W = 128
+    H = W = 112
     side = patch_side(ratio, H, W)
     assert abs(side * side / (H * W) - ratio) < 0.01
 
 
-def test_eval_boxes_inside_image_deterministic_and_independent():
-    H = W = 128
-    a = make_eval_boxes(200, [0.0, 0.1, 0.3, 0.5], 3, H, W, seed=1)
-    b = make_eval_boxes(200, [0.0, 0.1, 0.3, 0.5], 3, H, W, seed=1)
-    c = make_eval_boxes(200, [0.0, 0.1, 0.3, 0.5], 3, H, W, seed=2)
-    assert a[0.0].shape == (1, 200, 3) and (a[0.0][..., 2] == 0).all()
-    for r in (0.1, 0.3, 0.5):
-        assert a[r].shape == (3, 200, 3)
-        assert np.array_equal(a[r], b[r])                 # reproducible
-        assert not np.array_equal(a[r], c[r])             # val vs test seeds differ
-        assert not np.array_equal(a[r][0], a[r][1])       # repeats differ
-        y0, x0, s = a[r][..., 0], a[r][..., 1], a[r][..., 2]
-        assert (y0 >= 0).all() and (x0 >= 0).all() and (y0 + s <= H).all() and (x0 + s <= W).all()
-
-
 def test_train_boxes_probability_and_range():
-    H = W = 128
+    H = W = 112
     rng = np.random.default_rng(0)
     b = sample_train_boxes(20000, 0.5, (0.1, 0.3), H, W, rng)
     occ = b[:, 2] > 0

@@ -1,7 +1,7 @@
-"""Main-tier model pieces and the face-verification protocol.
+"""Model pieces and the face-verification protocol.
 
 * Model: ImageNet ResNet-18 trunk, global pool, then ``model.fc`` = FC(512->512, no bias) + BN1d
-  gives the 512-d embedding. Layer names of the 19 prunable convs are identical to the dev tier.
+  gives the 512-d embedding. The 19 prunable convs keep torchvision's layer names.
 * Loss: CosFace (large-margin cosine), head kept separate from the embedding network.
 * Verification: cosine similarity of L2-normalised embeddings (flip-augmented), accuracy with
   the standard 10-fold protocol (threshold chosen on 9 folds, accuracy on the held-out fold).
