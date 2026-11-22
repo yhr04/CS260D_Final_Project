@@ -85,6 +85,27 @@ curl -L -o data/_downloads/val.zip     https://www.kaggle.com/api/v1/datasets/do
 ```
 Notebook 01 decodes them once into `data/cache/` (uint8 memmap, ~18.5 GB, ~1.5 min).
 
+## Trained models
+
+The dense checkpoints are not in git (`*.pt` is ignored). They are attached to the GitHub release
+[`dense-baselines-seed42`](https://github.com/yhr04/CS260D_Final_Project/releases/tag/dense-baselines-seed42);
+download them into `checkpoints/` instead of retraining:
+
+| File | Size | Needed for | SHA-256 |
+|---|---|---|---|
+| `dense_aug_seed42.pt` | 67 MB | **every pruning experiment** (shared starting point) | `d8248b5dda150101f1b80188ad58d5b9b23977abd1843e58657f0cd5ef001bc3` |
+| `dense_clean_seed42.pt` | 67 MB | only to re-evaluate the Dense-Clean baseline | `abb4f24ca85f5970035eaef1eea56049a21d75c3c3381d395d6e112764408066` |
+
+```bash
+curl -L -o checkpoints/dense_aug_seed42.pt   https://github.com/yhr04/CS260D_Final_Project/releases/download/dense-baselines-seed42/dense_aug_seed42.pt
+curl -L -o checkpoints/dense_clean_seed42.pt https://github.com/yhr04/CS260D_Final_Project/releases/download/dense-baselines-seed42/dense_clean_seed42.pt
+```
+Check the hash with `certutil -hashfile checkpoints\dense_aug_seed42.pt SHA256` (Windows) or `sha256sum` (macOS/Linux).
+Each file holds the embedding network (`model`), the CosFace head (`head`, needed for gradient-based scoring)
+and the training config (`meta`); load it with
+`occprune.pipeline.load_checkpoint("checkpoints/dense_aug_seed42.pt")`. Only load checkpoints from this
+release: `.pt` files are unpickled. The data (previous section) is still needed for evaluation and pruning.
+
 ## Running experiments
 
 The notebooks are the entry point; run them top to bottom. Explanations inside are in Chinese; figures,
@@ -117,7 +138,7 @@ notebooks/                entry point (01 data, 02 dense baselines, 03 pruning, 
 tests/                    pytest quality checks
 results/                  JSON/CSV results, per-pair similarities, split, fixed occlusions, logs   (tracked)
 figures/                  PNG/PDF figures                                                          (tracked)
-checkpoints/, data/       model weights, downloads and caches                                      (git-ignored)
+checkpoints/, data/       model weights (see "Trained models"), downloads and caches               (git-ignored)
 requirements.txt          pinned versions for pip / conda
 pyproject.toml, uv.lock   same dependencies for uv
 ```
