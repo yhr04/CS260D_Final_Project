@@ -127,8 +127,8 @@ def embed(
             xs.append(preprocess(x8, r, fill, torch.ones(len(bi), dtype=torch.bool)))
         e = 0
         for x in xs:
-            if channels_last:
-                x = x.contiguous(memory_format=torch.channels_last)
+            layout = torch.channels_last if channels_last else torch.contiguous_format
+            x = x.contiguous(memory_format=layout)
             with torch.autocast(device_type=device.type, dtype=dtype, enabled=dtype is not None):
                 e = e + model(x).float()
         out.append(F.normalize(e, dim=1).cpu().numpy())

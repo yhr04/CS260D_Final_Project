@@ -1,0 +1,142 @@
+{
+  "design": {
+    "round": "first official checkpoint, fixed one-shot comparison",
+    "checkpoint": "dense_aug_seed42.pt",
+    "training_seed": 42,
+    "scoring_seed": 42,
+    "budget": 1024,
+    "clean_originals": 512,
+    "occluded_originals": 512,
+    "alpha": 0.5,
+    "sparsity": 0.5,
+    "fine_tuning_steps": 0,
+    "methods": [
+      "dense",
+      "magnitude",
+      "alpha_weighted",
+      "condition_max"
+    ],
+    "primary_contrast": "condition_max minus alpha_weighted, equal-weight arithmetic mean accuracy over the four held-out region geometries on LFW",
+    "secondary": "individual clean and geometry/severity conditions and mean of the three LFW squares; CASIA held-out validation",
+    "estimator": "per-example abs(weight * gradient of remapped training-label CosFace CE), eval BN, per-condition per-layer mean normalization",
+    "input_roles": "CASIA training for scoring. No LFW labels or images used for pruning or parameter selection.",
+    "evaluation": "official fixed masks and folds, 2nd image occluded; threshold fitted on remaining 9 folds as in project code"
+  },
+  "repeats": {
+    "training_seed": 42,
+    "scoring_seeds": [
+      42,
+      43,
+      44
+    ],
+    "alpha": 0.5,
+    "score_budget_per_seed": 1024,
+    "prunable_layer_sparsity": 0.5,
+    "fine_tuning_steps": 0,
+    "vary": "Calibration originals and their sampled square masks only; pair test masks, checkpoint, metric and all model settings stay fixed.",
+    "primary_contrast": "Unweighted LFW mean across eyes, mouth_nose, upper_half and lower_half: Condition-Max minus alpha-weighted.",
+    "interpretation": "Report every seed and secondary condition. Consistent direction across the three scoring samples plus technical verification supports sharing the observed result. A direction reversal leaves the result local for group review. Three scoring seeds using one training checkpoint do not quantify training variability."
+  },
+  "checkpoint": {
+    "file": "dense_aug_seed42.pt",
+    "bytes": 67065966,
+    "sha256": "d8248b5dda150101f1b80188ad58d5b9b23977abd1843e58657f0cd5ef001bc3",
+    "release": "https://github.com/yhr04/CS260D_Final_Project/releases/tag/dense-baselines-seed42",
+    "commit": "13e1e5f9ab0c74f2bb414c5f799b50d9b71ef367",
+    "tensor_check": "all finite",
+    "seed": 42,
+    "mode": "aug",
+    "epoch": 20,
+    "n_classes": 10361,
+    "head_shape": [
+      10361,
+      512
+    ]
+  },
+  "lfw_receipt": {
+    "source": "https://www.kaggle.com/api/v1/datasets/download/yakhyokhuja/agedb-30-calfw-cplfw-lfw-aligned-112x112",
+    "kaggle_version": "/kaggle-data-sets/6340148/10250443/bundle/archive.zip",
+    "archive_bytes": 1408340487,
+    "archive_selected_bytes": 382783065,
+    "sha256_cache": "3bcc706250d5e5f509cacad55d075f3b02d1e86040a1da9f5985e91d21cccabb",
+    "sha256_annotations": "1afe7bb9abd34a2cae72e5821e9d2490f183668f30c496a9b627b51ea748ddb8",
+    "image_dtype": "uint8",
+    "image_shape": [
+      12000,
+      112,
+      112,
+      3
+    ],
+    "pairs": 6000,
+    "positive_pairs": 3000,
+    "negative_pairs": 3000,
+    "positive_per_fold": [
+      300,
+      300,
+      300,
+      300,
+      300,
+      300,
+      300,
+      300,
+      300,
+      300
+    ],
+    "fold_rule": "10 consecutive groups of 600 pairs",
+    "team_labels_identical": true,
+    "input_order": "Rows of val/lfw_ann.txt verified by team build_pairs_cache: row t points to 2t.bmp and (2t+1).bmp",
+    "gallery": "images[::2]",
+    "probe": "images[1::2]"
+  },
+  "pair_keys": "dataset/seed/method/condition; common truth and fold arrays are dataset/issame and dataset/fold",
+  "controls": "Dense and magnitude have no calibration randomness; their seed42 rows are shared controls.",
+  "frozen_geometry_mean": "arithmetic mean over eyes, mouth_nose, upper_half, lower_half",
+  "times": "seconds on this machine. The bank is computed once per scoring seed; its time is shared by alpha and max, not additive.",
+  "hardware": {
+    "python": "3.11.5",
+    "platform": "macOS-27.0-arm64-arm-64bit",
+    "processor": "arm",
+    "cpu_count": 11,
+    "torch": "2.8.0",
+    "torchvision": "0.23.0",
+    "cuda_available": false,
+    "cuda_version": null,
+    "cudnn_version": null,
+    "gpu": null,
+    "gpu_memory_gb": null,
+    "torch_threads": 5,
+    "numpy": "1.26.4",
+    "sklearn": "1.5.2",
+    "pandas": "3.0.0",
+    "matplotlib": "3.9.4"
+  },
+  "device": "mps",
+  "inference_amp": "bf16",
+  "eval_batch_size": 64,
+  "weights_dtype_for_scoring": "float32",
+  "data_hashes": {
+    "42": {
+      "data/official_seed42/casia/calibration_images.npy": "a06a0af89905f3926b7d74fd166759096f2510233796e0ea93683cd3809b14c6",
+      "data/official_seed42/casia/calibration.npz": "f5b2ecba8e5d6accda5dbf61383f3e893167604a2d2fffe736ca056240b707dd",
+      "external/team_current_review/results/splits/split_seed42.npz": "9f4057a3cd3aa2a8d466886e4a27d575e8b39dce659931c9bc9a3fb625474c95"
+    },
+    "43": {
+      "data/official_seed42/scoring_seed43/calibration_images.npy": "2a53e770637018c95d93b24c3babeb120f96a78c4ffd16be10fdd0ebdc078fbd",
+      "data/official_seed42/scoring_seed43/calibration.npz": "6bb382c0cb80c4e09ee66b859a6639b65ee75eef5c508f78ff20194a9b734566",
+      "data/official_seed42/scoring_seed43/manifest.json": "23b294b58af2d4f70ba458b30db46e8440fe855aa2f09f26e9b2c60459a013fd",
+      "external/team_current_review/results/splits/split_seed42.npz": "9f4057a3cd3aa2a8d466886e4a27d575e8b39dce659931c9bc9a3fb625474c95"
+    },
+    "44": {
+      "data/official_seed42/scoring_seed44/calibration_images.npy": "23d915089eec5b67e4e98e78baea321b8c3cfc28fc20a49d9a14db70fc8fb912",
+      "data/official_seed42/scoring_seed44/calibration.npz": "ee0148a9025d3b3cf0658a49b8b615dd6c0b90458a91e4f319a3a89372feda2b",
+      "data/official_seed42/scoring_seed44/manifest.json": "6ec8586914fba0971deb524c083a3e20e40724133be7724de49748c2fef6e10a",
+      "external/team_current_review/results/splits/split_seed42.npz": "9f4057a3cd3aa2a8d466886e4a27d575e8b39dce659931c9bc9a3fb625474c95"
+    }
+  },
+  "files": {
+    "metrics.csv": "9dc670bebfcd82854cb66843e32262da01798e6fff3299a31a32ea9f5d2c9cd2",
+    "counts_and_timing.csv": "5f79adc88d5997aad8ddecd2aedcb4492decc5b9fd74acac61efe263466db852",
+    "mask_overlap.csv": "54714dd2dcd5740c9f69b17365dcbd150cf59076df282316508bf73500f0e4ba",
+    "pair_similarities.npz": "e80a265b0f3d4a5c731f74219704ad0b2b57c37afb427fc55aced369a5c2916c"
+  }
+}

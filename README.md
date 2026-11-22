@@ -20,7 +20,7 @@ Project plan, experimental design and timeline: [`docs/PROJECT_PLAN.md`](docs/PR
 |---|---|---|
 | E0 | Data download, memmap cache, held-out validation pairs, fixed test occlusions, throughput | done |
 | E1 | Dense-Clean / Dense-Aug (ResNet-18 + CosFace), clean + occluded verification | done (seed 42) |
-| E2–E4 | Pruning: magnitude sweep, Clean/Occ/Mixed-Taylor vs OAGP, importance analysis | next |
+| E2–E4 | Pruning comparisons | Notebook 03 implements magnitude, α-weighted and Condition-Max. |
 | E5+ | Region occlusions, α / budget ablations, optional extensions | planned |
 
 ## Dense baseline results (seed 42, LFW verification accuracy, %)
@@ -62,7 +62,7 @@ pip install -r requirements.txt
 uv sync
 ```
 
-Check: `python -m pytest -q` (12 tests) and
+Check: `python -m pytest -q` and
 `python -c "import torch; print(torch.__version__, torch.cuda.is_available())"`.
 
 **Notebook kernel.** In VS Code open the **repository folder** itself, open a notebook, then
@@ -115,6 +115,19 @@ tables and logs are in English for the report.
 |---|---|
 | `notebooks/01_data.ipynb` | cache build, held-out identity split + validation pairs, fixed test occlusions, figure, throughput (`prepare_data`) |
 | `notebooks/02_dense_baselines.ipynb` | Dense-Clean / Dense-Aug training (`run_dense`, resumable), LFW table, figures, paired bootstrap, gradient diagnostics |
+| `notebooks/03_pruning.ipynb` | Magnitude, α-weighted and Condition-Max on one Dense-Aug model with common calibration and fixed masks |
+
+### Reproduce the first one-shot comparison
+
+[Three-seed results, per-pair similarities and mask overlap](results/pruning/one_shot_seed42/README.md) are available for the fixed 50% one-shot comparison.
+
+Prepare the caches with notebook 01 and download the selected Dense-Aug checkpoint from the release above. From the repository root with `src` on the Python path, run:
+
+```bash
+python -m occprune.prune_run --checkpoint checkpoints/dense_aug_seed42.pt --output results/pruning/score42 --scoring-seed 42 --alpha 0.5 --sparsity 0.5 --budget 1024 --ft-epochs 0 --eval-batch-size 64 --test-set lfw
+```
+
+Repeat with scoring seeds 43 and 44, giving each run its own output directory. Omit `--test-set lfw` for validation-only runs. The code saves the calibration indices and rectangles, raw condition scores, packed masks and per-pair similarities. Dense and magnitude are invariant to the scoring seed in a one-shot run. Both gradient methods consume the same 512 clean and 512 occluded examples. The reported scoring time includes the common backward passes once per standalone method.
 
 All logic lives in `src/occprune/`; notebooks only call it. In notebook 02, `RETRAIN = True` retrains (otherwise
 saved results are reused). Hyper-parameters come from `configs/default.yaml` and can be overridden in the

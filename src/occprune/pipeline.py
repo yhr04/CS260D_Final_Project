@@ -455,9 +455,9 @@ def run_dense(
 # =============================================================================
 # evaluation
 # =============================================================================
-def load_checkpoint(path, device=None) -> tuple[nn.Module, nn.Module, dict]:
+def load_checkpoint(path, device=None, *, weights_only: bool = False) -> tuple[nn.Module, nn.Module, dict]:
     device = device or get_device("auto")
-    st = torch.load(resolve(path), map_location=device, weights_only=False)
+    st = torch.load(resolve(path), map_location=device, weights_only=weights_only)
     meta = st["meta"]
     mcfg = meta["config"]["model"]
     model = build_face_resnet18(mcfg["embedding_dim"], pretrained=False)
