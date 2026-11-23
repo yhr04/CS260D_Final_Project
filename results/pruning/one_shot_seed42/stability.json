@@ -1,0 +1,23 @@
+{
+  "status": "passed",
+  "training_seed": 42,
+  "checkpoint_sha256": "d8248b5dda150101f1b80188ad58d5b9b23977abd1843e58657f0cd5ef001bc3",
+  "scoring_seeds": [
+    42,
+    43,
+    44
+  ],
+  "primary_metric": "LFW mean accuracy on four held-out region geometries; max minus alpha",
+  "primary_contrast_pp": [
+    1.5833333333333477,
+    1.1708333333333432,
+    0.924999999999998
+  ],
+  "primary_mean_pp": 1.2263888888888963,
+  "primary_sample_sd_pp": 0.3326642590649985,
+  "primary_min_pp": 0.924999999999998,
+  "primary_max_pp": 1.5833333333333477,
+  "same_nonzero_direction_all_three": true,
+  "total_distinct_new_fold_accuracies_verified": 960,
+  "limitations": "Same trained backbone, evaluation pairs, sparsity and domain. Three draws of calibration examples; descriptive sample SD, no significance test."
+}
