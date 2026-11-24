@@ -20,7 +20,7 @@ Project plan, experimental design and timeline: [`docs/PROJECT_PLAN.md`](docs/PR
 |---|---|---|
 | E0 | Data download, memmap cache, held-out validation pairs, fixed test occlusions, throughput | done |
 | E1 | Dense-Clean / Dense-Aug (ResNet-18 + CosFace), clean + occluded verification | done (seed 42) |
-| E2–E4 | Pruning comparisons | Notebook 03 implements magnitude, α-weighted and Condition-Max. |
+| E2–E4 | Pruning: all 7 methods in one runner (`prune_run`), sparsity sweep, main comparison, importance analysis | runner done; first 50% one-shot comparison done |
 | E5+ | Region occlusions, α / budget ablations, optional extensions | planned |
 
 ## Dense baseline results (seed 42, LFW verification accuracy, %)
@@ -115,19 +115,24 @@ tables and logs are in English for the report.
 |---|---|
 | `notebooks/01_data.ipynb` | cache build, held-out identity split + validation pairs, fixed test occlusions, figure, throughput (`prepare_data`) |
 | `notebooks/02_dense_baselines.ipynb` | Dense-Clean / Dense-Aug training (`run_dense`, resumable), LFW table, figures, paired bootstrap, gradient diagnostics |
-| `notebooks/03_pruning.ipynb` | Magnitude, α-weighted and Condition-Max on one Dense-Aug model with common calibration and fixed masks |
+| `notebooks/03_pruning.ipynb` | Random, Magnitude, Clean/Occ/Mixed-Taylor, OAGP, OAGP-max on one Dense-Aug model with shared calibration and fixed masks (`run_pruning`), summary tables, paired bootstrap |
 
-### Reproduce the first one-shot comparison
+### Pruning runs
 
-[Three-seed results, per-pair similarities and mask overlap](results/pruning/one_shot_seed42/README.md) are available for the fixed 50% one-shot comparison.
-
-Prepare the caches with notebook 01 and download the selected Dense-Aug checkpoint from the release above. From the repository root with `src` on the Python path, run:
+All seven methods run through one command; scores are computed once and reused for every sparsity
+(see the docstring of `src/occprune/prune_run.py` for the shared calibration design):
 
 ```bash
-python -m occprune.prune_run --checkpoint checkpoints/dense_aug_seed42.pt --output results/pruning/score42 --scoring-seed 42 --alpha 0.5 --sparsity 0.5 --budget 1024 --ft-epochs 0 --eval-batch-size 64 --test-set lfw
+python -m occprune.prune_run --checkpoint checkpoints/dense_aug_seed42.pt --output results/pruning/runs/e3_score42     --sparsity 0.7 0.8 --scoring-seed 42 --ft-epochs 1 --test-set lfw
 ```
 
-Repeat with scoring seeds 43 and 44, giving each run its own output directory. Omit `--test-set lfw` for validation-only runs. The code saves the calibration indices and rectangles, raw condition scores, packed masks and per-pair similarities. Dense and magnitude are invariant to the scoring seed in a one-shot run. Both gradient methods consume the same 512 clean and 512 occluded examples. The reported scoring time includes the common backward passes once per standalone method.
+Defaults (B=1024, α=0.5, fine-tuning lr 0.01 with cosine decay) live in the `prune` section of
+`configs/default.yaml`. Leave out `--test-set lfw` while choosing settings on the held-out CASIA pairs.
+Each output directory holds `result.json` and `pair_similarities.npz` (tracked) plus `condition_scores.npz`
+and `masks.npz` (large, git-ignored). `occprune.prune_report` builds the tables (`metrics_table`,
+`summary_table`), paired bootstrap CIs and the clean-vs-occluded importance analysis (`bank_agreement`).
+The first 50% one-shot comparison (earlier runner, Magnitude / OAGP / OAGP-max, three scoring seeds) is in
+[`results/pruning/one_shot_seed42/`](results/pruning/one_shot_seed42/README.md).
 
 All logic lives in `src/occprune/`; notebooks only call it. In notebook 02, `RETRAIN = True` retrains (otherwise
 saved results are reused). Hyper-parameters come from `configs/default.yaml` and can be overridden in the

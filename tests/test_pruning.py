@@ -7,7 +7,7 @@ from torch.nn import functional as F
 from occprune.faceverif import CosFaceHead, build_face_resnet18
 from occprune.pruning import (
     condition_scores, apply_masks_, enforce_masks_, layerwise_masks,
-    magnitude_scores, prunable_layers, taylor_scores,
+    magnitude_scores, mean_banks, prunable_layers, random_scores, taylor_scores,
 )
 
 
@@ -135,3 +135,23 @@ def test_max_preserves_a_condition_specific_weight():
     maximum = condition_scores(clean, occluded, method="condition_max")
     torch.testing.assert_close(alpha["layer"], torch.tensor([.75, 1.5, .75]))
     torch.testing.assert_close(maximum["layer"], torch.tensor([1.5, 3.0, 1.5]))
+
+
+def test_random_scores_are_seeded_and_cover_prunable_layers():
+    model = TinyEmbedding()
+    a, b, c = random_scores(model, 1), random_scores(model, 1), random_scores(model, 2)
+    assert a.keys() == {"conv2"} and a["conv2"].shape == model.conv2.weight.shape
+    torch.testing.assert_close(a["conv2"], b["conv2"])
+    assert not torch.equal(a["conv2"], c["conv2"])
+
+
+def test_mean_of_half_banks_equals_taylor_on_the_union():
+    torch.manual_seed(0)
+    model, head = TinyEmbedding(), CosFaceHead(2, 3)
+    x, y = torch.randn(6, 3, 4, 4), torch.tensor([0, 1, 2, 0, 1, 2])
+    half_a = taylor_scores(model, head, [(x[:3], y[:3])])
+    half_b = taylor_scores(model, head, [(x[3:], y[3:])])
+    union = taylor_scores(model, head, [(x, y)])
+    torch.testing.assert_close(mean_banks(half_a, half_b)["conv2"], union["conv2"])
+    with pytest.raises(ValueError):
+        mean_banks(half_a, {"other": half_a["conv2"]})

@@ -24,6 +24,20 @@ def magnitude_scores(model: nn.Module) -> dict[str, torch.Tensor]:
     return {name: layer.weight.detach().abs().cpu() for name, layer in prunable_layers(model).items()}
 
 
+def random_scores(model: nn.Module, seed: int) -> dict[str, torch.Tensor]:
+    """Uniform random scores (lower bound); one CPU generator per call, layers in module order."""
+    g = torch.Generator().manual_seed(int(seed))
+    return {name: torch.rand(layer.weight.shape, generator=g) for name, layer in prunable_layers(model).items()}
+
+
+def mean_banks(*banks: Mapping[str, torch.Tensor]) -> dict[str, torch.Tensor]:
+    """Average equally sized per-image Taylor banks. Because every bank is a mean over the same
+    number of images, the result equals the per-image mean over the union of their images."""
+    if not banks or any(b.keys() != banks[0].keys() for b in banks):
+        raise ValueError("Banks must be nonempty and cover the same layers.")
+    return {name: sum(b[name] for b in banks) / len(banks) for name in banks[0]}
+
+
 @torch.enable_grad()
 def taylor_scores(
     model: nn.Module, head: nn.Module, batches: Iterable[tuple[torch.Tensor, torch.Tensor]],

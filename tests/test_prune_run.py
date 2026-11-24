@@ -9,7 +9,8 @@ from torch import nn
 
 from occprune import pipeline
 from occprune.faceverif import CosFaceHead, dataset_seed, pair_conditions, verification_metrics
-from occprune.prune_run import _checkpoint_split, run_pruning
+from occprune.prune_report import bank_agreement, load_banks, load_runs, metrics_table, paired_bootstrap, summary_table
+from occprune.prune_run import METHODS, _checkpoint_split, run_pruning
 from occprune.utils import load_config
 
 
@@ -29,6 +30,7 @@ def test_paired_pruning_run_and_saved_results(tmp_path, monkeypatch):
     cfg = load_config(overrides={
         "model": {"embedding_dim": 4}, "occlusion": {"val_ratios": [0.1]},
         "train": {"channels_last": False, "amp": "none", "batch_size": 4, "eval_batch_size": 4},
+        "data": {"num_workers": 0},
     })
     images = np.random.default_rng(42).integers(256, size=(20, 112, 112, 3), dtype=np.uint8)
     labels = np.repeat(np.arange(5), 4)
@@ -48,23 +50,43 @@ def test_paired_pruning_run_and_saved_results(tmp_path, monkeypatch):
                          "split_sha256": hashlib.sha256(split.read_bytes()).hexdigest()}}, ckpt)
     dest = tmp_path / "paired"
     kwargs = dict(cache_dir=tmp_path, split_path=split, masks_dir=tmp_path, data_label="fixture",
-                  budget=4, ft_epochs=1, device="cpu")
+                  budget=4, sparsities=(0.5, 0.75), ft_epochs=1, ft_lr=0.05, device="cpu")
     run_pruning(ckpt, dest, **kwargs)
     result = json.loads((dest / "result.json").read_text())
+    assert result["methods_run"] == list(METHODS)
     with np.load(dest / "calibration.npz") as calibration:
-        sources = np.r_[calibration["clean_indices"], calibration["occluded_indices"]]
-        assert len(set(sources)) == 4 and max(sources) < 12
+        a, b = calibration["half_A_indices"], calibration["half_B_indices"]
+        assert len(set(np.r_[a, b])) == 4 and max(np.r_[a, b]) < 12
+        assert calibration["half_A_boxes"].shape == calibration["half_B_boxes"].shape == (2, 3)
+    expected_backward = {"random": 0, "magnitude": 0, "clean_taylor": 4, "occ_taylor": 4,
+                         "mixed_taylor": 4, "oagp": 4, "oagp_max": 4}
     with np.load(dest / "pair_similarities.npz") as saved:
-        for method, n_backward in (("magnitude", 0), ("alpha_weighted", 4), ("condition_max", 4)):
+        for method, n_backward in expected_backward.items():
             entry = result["methods"][method]
-            assert entry["backward_examples"] == n_backward and entry["fine_tuning"]["steps"] == 3
-            for stage in ("one_shot", "fine_tuned"):
-                counts = entry[stage]["parameters"]["per_layer"]["conv2"]
-                assert counts["kept_by_mask"] == counts["nonzero"] == counts["total"] // 2
-                for cond in ("clean", "square10"):
-                    sims = saved[f"{method}/{stage}/validation/{cond}"]
-                    expected = verification_metrics(sims, same, folds)
-                    assert entry[stage]["metrics"]["validation"][cond]["acc"] == expected["acc"]
+            assert entry["backward_examples"] == n_backward
+            for key, keep_frac in (("s0.5", 0.5), ("s0.75", 0.25)):
+                e = entry["sparsities"][key]
+                ft = e["fine_tuning"]
+                assert ft["steps"] == 3 and ft["lr_first"] == 0.05 and ft["lr_last"] < 0.05
+                for stage in ("one_shot", "fine_tuned"):
+                    counts = e[stage]["parameters"]["per_layer"]["conv2"]
+                    assert counts["kept_by_mask"] == counts["nonzero"] == int(keep_frac * counts["total"])
+                    for cond in ("clean", "square10"):
+                        sims = saved[f"{method}/{key}/{stage}/validation/{cond}"]
+                        expected = verification_metrics(sims, same, folds)
+                        assert e[stage]["metrics"]["validation"][cond]["acc"] == expected["acc"]
+
+    # aggregation helpers read the same directory
+    df = metrics_table(load_runs([str(dest)]))
+    assert set(df.method) == {"dense", *METHODS}
+    table = summary_table(df, dataset="validation")
+    assert ("oagp_max", 0.75) in table.index and "clean" in table.columns
+    boot = paired_bootstrap(dest, "oagp", "oagp_max", sparsity=0.5, dataset="validation", n_boot=50)
+    assert list(boot.index) == ["clean", "square10"]
+    banks = load_banks(dest)
+    assert set(banks) == {"clean_A", "clean_B", "occ_A", "occ_B"}
+    agree = bank_agreement(dest, sparsities=(0.5,))
+    assert list(agree.index) == ["conv2"] and -1 <= agree.spearman.iloc[0] <= 1
     with pytest.raises(FileExistsError):
         run_pruning(ckpt, dest, **kwargs)
 

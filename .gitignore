@@ -21,3 +21,7 @@ Thumbs.db
 
 # smoke-test outputs
 *_smoke*
+
+# large pruning artefacts (score banks ~100 MB, masks); result.json / pair_similarities.npz are tracked
+results/pruning/**/condition_scores.npz
+results/pruning/**/masks.npz
