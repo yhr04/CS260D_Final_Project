@@ -177,6 +177,7 @@ $$S_j = (1-\alpha)\,\tilde I^{clean}_j + \alpha\,\tilde I^{occ}_j,\qquad \alpha 
 | ★E1 | 训练 Dense-Clean / Dense-Aug，LFW 等干净 + 遮挡验证，然后**冻结** Dense-Aug | 剪枝起点 | ✅ 完成（seed 42，notebook 02，第 8 节） |
 | ★E2 | 稀疏度扫描 {50, 60, 70, 80, 90}%，不微调（全部 7 种方法） | 找拐点 | ✅ 完成（3 个打分种子，`results/pruning/oneshot_grid/`）；拐点在 60–70% |
 | ★E3 | 7 种方法 × 拐点附近 2 个稀疏度 × {不微调, 增强微调} | **主对比** | ✅ 完成（60% / 70%，微调 1 epoch，`results/pruning/finetune_grid/`） |
+| E3b | 不微调 + BN 重校准（2,048 张训练图重新估计 BatchNorm 统计量，不更新权重），7 种方法 × 50–90% | 区分"BN 统计量失效"与"权重选错" | ✅ 完成（3 个打分种子，`results/pruning/bnrecal_grid/`） |
 | ★E4 | 干净与遮挡重要性的 Spearman 相关、各层 top-k 掩码重叠率 | 解释差异 | ✅ 完成（`oneshot_grid/bank_agreement.*`） |
 | E5 | 按区域遮挡（双眼、口鼻、上半脸、下半脸）上的对比分析 | 优势是否只是匹配了训练遮挡分布 | ✅ 完成（所有表都含四种区域及其平均） |
 | E6 | α ∈ {0, .25, .5, .75, 1}（按验证集选）；OAGP-SNR；估计器消融（逐样本 vs mini-batch，Taylor vs Fisher） | 融合方式是否重要 | ✅ α 扫描完成（`results/pruning/alpha_sweep/`）；OAGP-SNR 与估计器消融未做 |
@@ -189,7 +190,7 @@ $$S_j = (1-\alpha)\,\tilde I^{clean}_j + \alpha\,\tilde I^{occ}_j,\qquad \alpha 
 **需要的图：**
 1. Dense-Clean vs Dense-Aug：各遮挡条件下的验证准确率（✅ `figures/dense_lfw_seed42.png`）
 2. 主对比：各方法在各遮挡条件下的结果（✅ 表格 `results/pruning/*/summary_lfw_*.md`，配对 CI 在 `bootstrap_lfw.csv`；柱状图待做）
-3. 性能 vs 稀疏度：干净 / 遮挡分别一组曲线，不微调与微调分开（✅ `results/pruning/oneshot_grid/sparsity_lfw_one_shot.png`、`finetune_grid/sparsity_lfw_fine_tuned.png`）
+3. 性能 vs 稀疏度：干净 / 遮挡分别一组曲线，不微调与微调分开（✅ `results/pruning/oneshot_grid/sparsity_lfw_one_shot.png`、`finetune_grid/sparsity_lfw_fine_tuned.png`；BN 重校准后 `bnrecal_grid/sparsity_lfw_bn_recal.png`，三阶段对比 `bnrecal_grid/stage_comparison.png`）
 4. α 消融曲线（✅ `results/pruning/alpha_sweep/alpha_sweep.png`）
 5. 遮挡样例图（✅ `figures/occlusion_conditions.png`）
 6. 干净 vs 遮挡重要性：逐层 Spearman 与掩码重叠率（✅ `results/pruning/oneshot_grid/bank_agreement.png`；分布与散点图待做）
@@ -226,7 +227,7 @@ $$S_j = (1-\alpha)\,\tilde I^{clean}_j + \alpha\,\tilde I^{occ}_j,\qquad \alpha 
   - `02_dense_baselines`：Dense-Clean / Dense-Aug 训练与验证（E1）
   - `03_pruning`：7 种方法的统一剪枝入口（`prune_run`），E2 扫描、E3 主对比、E5；E4 用 `prune_report.bank_agreement`
   - `04_calibration_selection`：打分样本选择（coreset 类选择器 × 预算，E8 / E10）
-  - α 扫描与多打分种子（E6、E7）也在 `03_pruning` 中运行和查看；`prune_report.write_grid_report` / `write_alpha_report` 生成 `results/pruning/` 下的表和图
+  - α 扫描与多打分种子（E6、E7）也在 `03_pruning` 中运行和查看；`prune_report.write_grid_report` / `write_stage_report` / `write_alpha_report` 生成 `results/pruning/` 下的表和图
 - 训练时间长：notebook 中设置 `RETRAIN` 开关，训练每个 epoch 保存 checkpoint，可断点续训；也可在终端运行 `python -m occprune.pipeline train --mode aug`，不依赖 VS Code 窗口。
 - 所有超参数在 `configs/default.yaml`；结果 JSON 记录完整配置和软硬件版本。
 - `results/`、`figures/` 进 git；`data/`、`checkpoints/` 不进 git。
@@ -262,6 +263,8 @@ LFW 验证准确率（%，10 折 mean ± std；每对第二张图遮挡）：
 
 LFW 四种区域遮挡平均准确率（%，3 个种子平均；Dense-Aug 未剪枝为 95.66）：
 
+不微调（one-shot）与微调 1 epoch 后：
+
 | 方法 | 50% | 60% | 70% | 80% | 90% | 60% 微调后 | 70% 微调后 |
 |---|---|---|---|---|---|---|---|
 | Random | 56.93 | 54.87 | 54.08 | 54.11 | 53.05 | 93.53 | 91.77 |
@@ -272,16 +275,29 @@ LFW 四种区域遮挡平均准确率（%，3 个种子平均；Dense-Aug 未剪
 | OAGP（α=0.5） | 92.82 | 73.25 | 55.63 | 54.63 | 53.73 | **95.43** | 95.16 |
 | OAGP-max | 93.76 | 78.79 | 56.44 | 57.36 | 53.80 | 95.39 | 95.17 |
 
+不微调 + BN 重校准（E3b；未剪枝模型重校准后 95.60，几乎不变）：
+
+| 方法 | 50% | 60% | 70% | 80% | 90% |
+|---|---|---|---|---|---|
+| Random | 78.21 | 67.33 | 57.61 | 52.37 | 51.34 |
+| Magnitude | **95.10** | **94.51** | **92.84** | **88.57** | **74.91** |
+| Clean-Taylor | 90.49 | 86.88 | 78.15 | 58.04 | 49.98 |
+| Occ-Taylor | 92.58 | 89.76 | 83.10 | 64.23 | 50.71 |
+| Mixed-Taylor | 92.31 | 89.62 | 82.45 | 63.57 | 51.67 |
+| OAGP（α=0.5） | 92.23 | 89.43 | 82.08 | 62.72 | 51.35 |
+| OAGP-max | 92.44 | 89.96 | 83.07 | 64.34 | 50.90 |
+
 **观察**
 
-1. **打分数据很重要**：不微调时 Occ-Taylor 比 Clean-Taylor 高 +6.2 / +11.5 / +4.8 / +4.5 个百分点（50–80%），每个稀疏度 24 个"种子 × 条件"比较中有 22–24 个配对 bootstrap CI 大于 0。微调后差距缩小到 +0.2，但没有反转（48 个比较里 14 个显著为正，0 个为负）。
-2. **不微调时 Magnitude 最稳**：60% 起所有 Taylor 类方法大幅下降，Magnitude 在 70% 仍有 86.7。可能原因：一次剪掉大量权重后 BatchNorm 统计量失效，而 Taylor 分数是剪枝前的一阶局部近似。微调后差距几乎消失，支持这一解释（可用 BN 重校准直接检验）。
-3. **融合不如只用遮挡分数**：OAGP-max 好于 OAGP，α 扫描在验证集上选出 0.75（50%）和 1（60%、70%），OAGP-max ≈ Occ-Taylor。
-4. **干净与遮挡重要性高度相关但不相同**：按参数量加权的 Spearman 0.964，保留权重 Jaccard 为 0.887 / 0.846 / 0.792（50 / 70 / 90%），遮挡输入的分数平均是干净输入的 1.72 倍。
-5. **打分样本选择影响很小**：6 种 coreset 类选择器中最好的（Sieve）比随机只高 +0.41（OAGP）/ +0.09（OAGP-max），在种子波动之内。
-6. **局限**：只有一个 dense 训练种子；微调种子固定（Magnitude 微调后三次结果相同）；剪枝后的模型只在 LFW 和 CASIA 验证对上评估；非结构化稀疏不带来实际加速；遮挡都是合成的。
+1. **打分数据很重要**：不微调时 Occ-Taylor 比 Clean-Taylor 高 +6.2 / +11.5 / +4.8 / +4.5 个百分点（50–80%），每个稀疏度 24 个"种子 × 条件"比较中有 22–24 个配对 bootstrap CI 大于 0。BN 重校准后仍高 +2.8 / +3.5 / +4.3 / +6.3（21–24 个显著为正）。微调后差距缩小到 +0.2，但没有反转（48 个比较里 14 个显著为正，0 个为负）。
+2. **不微调时 Magnitude 最稳**：60% 起所有 Taylor 类方法大幅下降，Magnitude 在 70% 仍有 86.7。
+3. **Taylor 的崩溃大部分来自 BN 统计量失效，但不是全部**（E3b）：只重新估计 BatchNorm 统计量（不更新权重，约 0.2 秒），60–70% 时就补回了"不微调 → 微调"差距的约三分之二（Occ-Taylor 70%：59.5 → 83.1，微调后 95.2）。但 Magnitude 在每个稀疏度仍然领先（70% 时 92.8，比 Occ-Taylor 高 10.4，24/24 显著），80–90% 差距反而扩大到 22–24 个百分点。说明梯度准则选出的掩码本身在零样本使用时也更差，剩下的差距要靠微调。另外 50% 时重校准让遮挡打分的方法略降约 1 个百分点，90% 时梯度方法都接近随机水平。
+4. **融合不如只用遮挡分数**：OAGP-max 好于 OAGP，α 扫描在验证集上选出 0.75（50%）和 1（60%、70%），OAGP-max ≈ Occ-Taylor。
+5. **干净与遮挡重要性高度相关但不相同**：按参数量加权的 Spearman 0.964，保留权重 Jaccard 为 0.887 / 0.846 / 0.792（50 / 70 / 90%），遮挡输入的分数平均是干净输入的 1.72 倍。
+6. **打分样本选择影响很小**：6 种 coreset 类选择器中最好的（Sieve）比随机只高 +0.41（OAGP）/ +0.09（OAGP-max），在种子波动之内。
+7. **局限**：只有一个 dense 训练种子；微调种子固定（Magnitude 微调后三次结果相同）；剪枝后的模型只在 LFW 和 CASIA 验证对上评估；非结构化稀疏不带来实际加速；遮挡都是合成的。
 
-详细表格、图和复现命令见 `results/pruning/oneshot_grid/`、`finetune_grid/`、`alpha_sweep/`、`calibration_selection/` 下的 README。
+详细表格、图和复现命令见 `results/pruning/oneshot_grid/`、`bnrecal_grid/`、`finetune_grid/`、`alpha_sweep/`、`calibration_selection/` 下的 README。
 
 ---
 
@@ -298,7 +314,7 @@ LFW 四种区域遮挡平均准确率（%，3 个种子平均；Dense-Aug 未剪
 | **11/30 中午** | **提交摘要** | D |
 | 11/30–12/2 | 完成 slides、彩排、Q&A 准备（第 10 节） | 全组 |
 | 12/1 或 12/3 | 展示，记录 TA 反馈 | 全组 |
-| 12/2–8 | ✅ E6 α 扫描、✅ E7、✅ E8 / E10（已提前完成）；可选：BN 重校准分析、高稀疏度微调、E9、E11 | A、B、C |
+| 12/2–8 | ✅ E6 α 扫描、✅ E7、✅ E8 / E10、✅ BN 重校准分析（E3b）（已提前完成）；可选：高稀疏度微调、E9、E11 | A、B、C |
 | 12/7–11 | 报告写作与定稿，写清每位成员的贡献 | 全组 |
 
 **角色建议**（syllabus 要求每人都参与想法、实现、展示和写作，以下只是主责）：

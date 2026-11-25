@@ -60,3 +60,4 @@ prune:                          # read by occprune.prune_run (notebook 03); CLI 
   ft_epochs: 0                  # 0 = one-shot only
   ft_lr: 0.01                   # fine-tuning starts from a converged model: 10x below the dense lr
   ft_warmup_steps: 0            # then per-step cosine to 0
+  bn_recal_images: 0            # >0: also evaluate after re-estimating BatchNorm statistics on N training images

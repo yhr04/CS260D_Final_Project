@@ -11,6 +11,7 @@ ResNet-18 face model is pruned to the same sparsity with the same gradient-scori
 | Experiment | Read the results | Open the notebook |
 | --- | --- | --- |
 | One-shot pruning, 50–90% sparsity, 7 methods × 3 seeds | [Sparsity curves, paired contrasts, clean vs occluded importance](results/pruning/oneshot_grid/README.md) | [03 · Pruning runner and saved results](notebooks/03_pruning.ipynb) |
+| One-shot + BatchNorm recalibration, 50–90% | [How much of the collapse is stale BN statistics](results/pruning/bnrecal_grid/README.md) | [03 · Pruning runner and saved results](notebooks/03_pruning.ipynb) |
 | Pruning + 1 epoch of fine-tuning at 60% and 70% | [Recovery after fine-tuning](results/pruning/finetune_grid/README.md) | [03 · Pruning runner and saved results](notebooks/03_pruning.ipynb) |
 | OAGP fusion weight α | [α ∈ {0, 0.25, 0.5, 0.75, 1}, chosen on validation](results/pruning/alpha_sweep/README.md) | [03 · Pruning runner and saved results](notebooks/03_pruning.ipynb) |
 | Calibration photo selection for OAGP and OAGP-max | [Six selectors at 256, 512 and 1,024 photos](results/pruning/calibration_selection/README.md) | [04 · Explore results or rerun pruning](notebooks/04_calibration_selection.ipynb) |
@@ -33,11 +34,15 @@ For implementation details, see the [pruning scores and masks](src/occprune/prun
    After one epoch of fine-tuning the gap shrinks to about +0.2 pp but never reverses.
 2. **Magnitude is the most robust one-shot criterion.** It kept 93.21% at 60% and 86.68% at 70%, while every Taylor
    variant fell below 80% and 60%.
-3. **Fine-tuning erases most differences.** At 60–70% sparsity all methods except Random recover to 95.0–95.4%.
-4. **Fusing clean and occluded scores does not help.** OAGP-max beats α-weighted OAGP, validation picks α = 0.75–1
+3. **Most of the Taylor collapse is stale BatchNorm statistics, but not all of it.** Re-estimating BN statistics on
+   2,048 training photos (no weight update, under a second) closes about two-thirds of the one-shot → fine-tuned gap at
+   60–70% (Occ-Taylor 59.5 → 83.1% at 70%). Magnitude still leads at every sparsity (92.8% at 70%), and Occ-Taylor still
+   beats Clean-Taylor by +2.8 to +6.3 pp at 50–80%.
+4. **Fine-tuning erases most differences.** At 60–70% sparsity all methods except Random recover to 95.0–95.4%.
+5. **Fusing clean and occluded scores does not help.** OAGP-max beats α-weighted OAGP, validation picks α = 0.75–1
    (mostly occluded), and OAGP-max ≈ Occ-Taylor. Clean and occluded importance are closely aligned (Spearman 0.96;
    79–89% of kept weights shared).
-5. **Choosing calibration photos matters little.** At 50% sparsity the best of six coreset-style selectors (Sieve-Streaming)
+6. **Choosing calibration photos matters little.** At 50% sparsity the best of six coreset-style selectors (Sieve-Streaming)
    gains only +0.41 / +0.09 pp over random photos for OAGP / OAGP-max, within seed variation.
 
 **Protocol** (as in the occluded-face-recognition literature, e.g. PDSN, FROM): train on **CASIA-WebFace**
@@ -57,6 +62,7 @@ Project plan, experimental design and timeline: [`docs/PROJECT_PLAN.md`](docs/PR
 | E1 | Dense-Clean / Dense-Aug (ResNet-18 + CosFace), clean + occluded verification | done (seed 42) |
 | E2 | Sparsity sweep 50–90%, all 7 methods, no fine-tuning | done (3 scoring seeds) |
 | E3 | Main comparison at 60% / 70%, one-shot and after 1 epoch of fine-tuning | done (3 scoring seeds) |
+| E3b | One-shot + BatchNorm recalibration (2,048 images), 50–90%, all 7 methods | done (3 scoring seeds) |
 | E4 | Clean vs occluded importance: Spearman, kept-weight overlap per layer | done |
 | E5 | Held-out region occlusions | done (in every table) |
 | E6 | OAGP α sweep {0, 0.25, 0.5, 0.75, 1} | done; OAGP-SNR and estimator ablations not run |
@@ -180,7 +186,9 @@ Defaults (B=1024, α=0.5, fine-tuning lr 0.01 with cosine decay) live in the `pr
 Each output directory holds `result.json` and `pair_similarities.npz` (tracked) plus `condition_scores.npz`
 and `masks.npz` (large, git-ignored). `occprune.prune_report` builds the tables (`metrics_table`,
 `summary_table`), paired bootstrap CIs and the clean-vs-occluded importance analysis (`bank_agreement`).
-`write_grid_report` writes every table and figure for a set of runs, and `write_alpha_report` builds the α sweep.
+`write_grid_report` writes every table and figure for a set of runs, `write_stage_report` compares one-shot,
+BN-recalibrated and fine-tuned accuracy, and `write_alpha_report` builds the α sweep. `--bn-recal N` also evaluates
+each pruned model after re-estimating its BatchNorm statistics on N training photos.
 
 All logic lives in `src/occprune/`; notebooks only call it. In notebook 02, `RETRAIN = True` retrains (otherwise
 saved results are reused). Hyper-parameters come from `configs/default.yaml` and can be overridden in the

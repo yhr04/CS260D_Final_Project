@@ -20,6 +20,11 @@ mixed_taylor = mean(clean_A, occ_B); oagp / oagp_max combine clean_A and occ_B.
 Mixed, OAGP and OAGP-max therefore see exactly the same 1024 views; they differ only in how the
 two conditions are combined. Halves A-clean / B-occluded are the draws of the first team run.
 
+Optional BN recalibration (`bn_recal_images` > 0): after the one-shot evaluation, a copy of each
+pruned model gets its BatchNorm running statistics re-estimated on N training images (forward passes
+only, no weight update) and is evaluated again as stage "bn_recal". The same N images (Dense-Aug
+augmentation, seeded by the checkpoint seed) are used for every method, sparsity and scoring seed.
+
 Results land in a NEW output directory: result.json, calibration.npz, pair_similarities.npz and,
 unless disabled, masks.npz and condition_scores.npz (large, git-ignored).
 """
@@ -45,7 +50,8 @@ from .pruning import (
     apply_masks_, condition_scores, enforce_masks_, layerwise_masks, magnitude_scores,
     mean_banks, random_scores, taylor_scores,
 )
-from .training import epoch_batches, lr_lambda, make_loader, param_groups, train_step
+from .transforms import preprocess, to_tensor_images
+from .training import amp_dtype, epoch_batches, lr_lambda, make_loader, param_groups, train_step
 from .utils import Timer, env_info, get_device, load_config, resolve, save_json, set_seed
 
 METHODS = ("random", "magnitude", "clean_taylor", "occ_taylor", "mixed_taylor", "oagp", "oagp_max")
@@ -108,10 +114,54 @@ def _fine_tune(model, head, masks, labels, train_idx, cfg, seed, epochs, lr, war
             "lr": lr, "warmup_steps": warmup_steps, "lr_first": lrs[0], "lr_max": max(lrs), "lr_last": lrs[-1]}
 
 
+def bn_recal_indices(train_idx: np.ndarray, n: int, seed: int) -> np.ndarray:
+    """Sorted training rows used to re-estimate BatchNorm statistics (independent of the scoring seed)."""
+    if not 0 < n <= len(train_idx):
+        raise ValueError("bn_recal_images must be between 1 and the number of training images")
+    return np.sort(np.random.default_rng([seed, 11]).choice(train_idx, n, replace=False))
+
+
+@torch.no_grad()
+def recalibrate_bn_(model, images, idx, cfg, seed, dev) -> dict:
+    """Re-estimate every BatchNorm's running mean / variance in place: reset them, then forward `idx`
+    in train mode with momentum=None (exact average over batches). Weights are not touched, so
+    pruned weights stay zero. Inputs follow the Dense-Aug training distribution (squares w.p.
+    train_prob, flips) and the training autocast / memory format, i.e. how the dense statistics arose."""
+    t, occ = cfg["train"], cfg["occlusion"]
+    bns = [m for m in model.modules() if isinstance(m, torch.nn.modules.batchnorm._BatchNorm)]
+    if not bns:
+        raise ValueError("Model has no BatchNorm layers")
+    saved = [(m, m.momentum) for m in bns]
+    for m in bns:
+        m.reset_running_stats()
+        m.momentum = None
+    rng = np.random.default_rng([seed, 12])
+    g = torch.Generator().manual_seed(seed)
+    dt = amp_dtype(t["amp"])
+    bs = t["batch_size"]
+    was_training = model.training
+    model.train()
+    with Timer(dev) as timer:
+        for s in range(0, len(idx), bs):
+            rows = idx[s:s + bs]
+            x8 = to_tensor_images(images[rows], dev)
+            boxes = sample_train_boxes(len(rows), occ["train_prob"], tuple(occ["train_ratio"]), 112, 112, rng)
+            flip = torch.rand(len(rows), generator=g) < 0.5 if t["hflip"] else None
+            x = preprocess(x8, boxes, occ["fill"], flip)
+            if t["channels_last"]:
+                x = x.contiguous(memory_format=torch.channels_last)
+            with torch.autocast(device_type=x.device.type, dtype=dt, enabled=dt is not None):
+                model(x)
+    for m, momentum in saved:
+        m.momentum = momentum
+    model.train(was_training)
+    return {"images": int(len(idx)), "batches": -(-len(idx) // bs), "bn_layers": len(bns), "seconds": timer.elapsed}
+
+
 def run_pruning(checkpoint, output, *, methods=METHODS, sparsities=(0.5,), cache_dir=None, split_path=None,
                 masks_dir="results/masks", data_label="CASIA-WebFace", alpha=None, budget=None,
                 scoring_seed=42, ft_epochs=None, ft_lr=None, ft_warmup_steps=None, device="auto",
-                eval_batch_size=None, test_sets=(), save_banks=True, save_masks=True):
+                eval_batch_size=None, test_sets=(), save_banks=True, save_masks=True, bn_recal_images=None):
     """Run every (method, sparsity) on validation (+ `test_sets` once settings are fixed).
 
     Defaults for alpha / budget / ft_* come from the `prune` section of configs/default.yaml.
@@ -123,6 +173,7 @@ def run_pruning(checkpoint, output, *, methods=METHODS, sparsities=(0.5,), cache
     ft_epochs = pcfg.get("ft_epochs", 0) if ft_epochs is None else ft_epochs
     ft_lr = pcfg.get("ft_lr", 0.01) if ft_lr is None else ft_lr
     ft_warmup_steps = pcfg.get("ft_warmup_steps", 0) if ft_warmup_steps is None else ft_warmup_steps
+    bn_recal_images = pcfg.get("bn_recal_images", 0) if bn_recal_images is None else bn_recal_images
     methods = tuple(methods)
     sparsities = tuple(float(s) for s in sparsities)
     out, checkpoint = resolve(output), resolve(checkpoint)
@@ -134,8 +185,9 @@ def run_pruning(checkpoint, output, *, methods=METHODS, sparsities=(0.5,), cache
         raise ValueError(f"methods must be distinct names from {METHODS}")
     if not sparsities or any(not 0 <= s <= 1 for s in sparsities):
         raise ValueError("sparsities must lie in [0,1]")
-    if not 0 <= alpha <= 1 or ft_epochs < 0 or ft_lr <= 0 or ft_warmup_steps < 0:
-        raise ValueError("α must be in [0,1]; ft_epochs / ft_warmup_steps nonnegative; ft_lr positive")
+    if not 0 <= alpha <= 1 or ft_epochs < 0 or ft_lr <= 0 or ft_warmup_steps < 0 or bn_recal_images < 0:
+        raise ValueError("α must be in [0,1]; ft_epochs / ft_warmup_steps / bn_recal_images nonnegative; "
+                         "ft_lr positive")
     dev = get_device(device)
     dense, dense_head, meta = load_checkpoint(checkpoint, dev, weights_only=True)
     if meta["mode"] != "aug":
@@ -160,6 +212,7 @@ def run_pruning(checkpoint, output, *, methods=METHODS, sparsities=(0.5,), cache
     if n_cls != meta["n_classes"]:
         raise ValueError("Training label remapping does not match the CosFace checkpoint")
     occ = cfg["occlusion"]
+    recal_idx = bn_recal_indices(train_idx, bn_recal_images, seed) if bn_recal_images else None
     first, second, boxes_first, boxes_second = calibration_draw(train_idx, budget, scoring_seed, occ["train_ratio"])
     val_pairs, val_same, val_fold = split["val_pairs"], split["val_issame"], split["fold"]
     if len(np.unique(val_fold)) < 2:
@@ -188,6 +241,9 @@ def run_pruning(checkpoint, output, *, methods=METHODS, sparsities=(0.5,), cache
         "methods_run": list(methods), "sparsities": list(sparsities), "alpha": alpha, "budget": budget,
         "fine_tuning": {"epochs": ft_epochs, "lr": ft_lr, "warmup_steps": ft_warmup_steps,
                         "schedule": "linear warm-up then per-step cosine to 0; masks re-applied after every step"},
+        "bn_recalibration": {"images": int(bn_recal_images), "seed": seed,
+                             "procedure": "reset running stats, cumulative average over Dense-Aug-augmented "
+                                          "training views in train mode; no weight update"},
         "calibration": {"originals": budget, "half_size": budget // 2,
                         "estimator": "per-example absolute CosFace Taylor, BN in eval mode, fp32",
                         "normalization": "OAGP: per condition and layer, divide by mean + 1e-12",
@@ -212,6 +268,13 @@ def run_pruning(checkpoint, output, *, methods=METHODS, sparsities=(0.5,), cache
         return entry
 
     result["dense"] = evaluate(dense, dense_head, None, "dense")
+    if bn_recal_images:
+        # control: recalibrating the unpruned model should leave it (almost) unchanged
+        control = copy.deepcopy(dense)
+        recal_info = recalibrate_bn_(control, images, recal_idx, cfg, seed, dev)
+        result["dense_bn_recal"] = {"bn_recalibration": recal_info,
+                                    **evaluate(control.eval(), dense_head, None, "dense_bn_recal")}
+        del control
     out.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix=".pruning-", dir=out.parent) as tmp:
         # Publishing the completed directory makes an interrupted run safe to retry.
@@ -263,6 +326,11 @@ def run_pruning(checkpoint, output, *, methods=METHODS, sparsities=(0.5,), cache
                     all_masks.update({f"{method}/{key}/{k}": np.packbits(v.cpu().numpy()) for k, v in masks.items()})
                 entry = {"masking_seconds": masking.elapsed,
                          "one_shot": evaluate(model, head, device_masks, f"{method}/{key}/one_shot")}
+                if bn_recal_images:
+                    recal = copy.deepcopy(model)
+                    entry["bn_recalibration"] = recalibrate_bn_(recal, images, recal_idx, cfg, seed, dev)
+                    entry["bn_recal"] = evaluate(recal.eval(), head, device_masks, f"{method}/{key}/bn_recal")
+                    del recal
                 if ft_epochs:
                     ft_cfg = cfg
                     if dev.type == "mps":
@@ -308,6 +376,8 @@ def main():
                         help="Optional final benchmark after validation settings are fixed (e.g. lfw)")
     parser.add_argument("--no-save-banks", dest="save_banks", action="store_false")
     parser.add_argument("--no-save-masks", dest="save_masks", action="store_false")
+    parser.add_argument("--bn-recal", dest="bn_recal_images", type=int,
+                        help="Also evaluate each pruned model after re-estimating BatchNorm statistics on N images")
     args = parser.parse_args()
     run_pruning(**vars(args))
     print(f"Saved {resolve(args.output) / 'result.json'}")

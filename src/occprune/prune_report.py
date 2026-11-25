@@ -23,6 +23,8 @@ from .pruning import layerwise_masks, mean_banks
 from .utils import resolve
 
 CONDITION_ORDER = ("clean", "square10", "square30", "square50", *REGIONS)
+STAGES = ("one_shot", "bn_recal", "fine_tuned")   # bn_recal = one-shot + BatchNorm re-estimation
+STAGE_TITLE = {"one_shot": "one-shot", "bn_recal": "one-shot + BN recalibration", "fine_tuned": "fine-tuned"}
 
 
 def load_runs(pattern) -> dict[str, dict]:
@@ -55,7 +57,7 @@ def metrics_table(runs: dict[str, dict]) -> pd.DataFrame:
         for method, me in r["methods"].items():
             for key, e in me["sparsities"].items():
                 sp = float(key[1:])
-                for stage in ("one_shot", "fine_tuned"):
+                for stage in STAGES:
                     if stage in e:
                         add(run, seed, method, sp, stage, e[stage])
     return pd.DataFrame(rows)
@@ -267,14 +269,14 @@ def write_grid_report(run_dirs, out_dir, *, bank_sparsities=(0.5, 0.7, 0.9),
     written = {"metrics_long": out / "metrics_long.csv"}
     names = {"lfw": "LFW", "validation": "held-out CASIA pairs"}
     for dataset in sorted(df.dataset.unique()):
-        for stage in ("one_shot", "fine_tuned"):
+        for stage in STAGES:
             if not (df.stage == stage).any():
                 continue
             stats = seed_stats(df, dataset, stage)
             stats.to_csv(out / f"summary_{dataset}_{stage}.csv", index=False)
             (out / f"summary_{dataset}_{stage}.md").write_text(_markdown(formatted_table(stats)), encoding="utf-8")
             plot_sparsity_curves(stats, path=out / f"sparsity_{dataset}_{stage}.png",
-                                 title=f"{names.get(dataset, dataset)}, {stage.replace('_', '-')} "
+                                 title=f"{names.get(dataset, dataset)}, {STAGE_TITLE[stage]} "
                                        "(mean ± sd over scoring seeds)")
             written[f"{dataset}_{stage}"] = out / f"summary_{dataset}_{stage}.md"
 
@@ -286,7 +288,7 @@ def write_grid_report(run_dirs, out_dir, *, bank_sparsities=(0.5, 0.7, 0.9),
             if a not in r["methods"] or b not in r["methods"]:
                 continue
             for key, entry in r["methods"][a]["sparsities"].items():
-                for stage in ("one_shot", "fine_tuned"):
+                for stage in STAGES:
                     if stage not in entry:
                         continue
                     t = paired_bootstrap(run, a, b, sparsity=float(key[1:]), stage=stage)
@@ -305,6 +307,86 @@ def write_grid_report(run_dirs, out_dir, *, bank_sparsities=(0.5, 0.7, 0.9),
         _plot_bank_agreement(a, bank_sparsities, out / "bank_agreement.png")
         written["bank_agreement"] = out / "bank_agreement.csv"
     return written
+
+
+# =============================================================================
+# stage comparison: one-shot vs one-shot + BN recalibration vs fine-tuned
+# =============================================================================
+STAGE_STYLE = {"one_shot": ("#9cc0ee", "o", "--"), "bn_recal": ("#2a78d6", "s", "-"),
+               "fine_tuned": ("#06264f", "D", "-")}   # sequential: more repair = darker
+
+
+def stage_table(runs: dict[str, dict], dataset: str = "lfw") -> pd.DataFrame:
+    """Region-mean accuracy (%) per method, sparsity and stage, mean / sd over scoring seeds. Runs may overlap
+    (e.g. a BN-recalibration grid and a fine-tuning grid both hold one-shot results): a stage measured for the
+    same seed in several runs is counted once. Also adds `gap_closed` = (bn_recal − one_shot) / (fine_tuned −
+    one_shot) where all three stages exist."""
+    d = metrics_table(runs)
+    d = d[(d.dataset == dataset) & d.condition.isin(REGIONS) & (d.stage != "dense")]
+    d = d.drop_duplicates(["scoring_seed", "method", "sparsity", "stage", "condition"])
+    per_seed = d.groupby(["method", "sparsity", "stage", "scoring_seed"]).acc.mean().mul(100)
+    g = per_seed.groupby(["method", "sparsity", "stage"])
+    t = pd.DataFrame({"mean": g.mean(), "sd": g.std(ddof=1), "n_seeds": g.count()}).reset_index()
+    wide = t.pivot_table(index=["method", "sparsity"], columns="stage", values="mean")
+    if set(STAGES) <= set(wide.columns):
+        gap = ((wide.bn_recal - wide.one_shot) / (wide.fine_tuned - wide.one_shot)).dropna()
+        t = t.merge(gap.rename("gap_closed").reset_index(), on=["method", "sparsity"], how="left")
+    return t
+
+
+def write_stage_report(run_dirs, out_dir, methods=("random", "magnitude", "clean_taylor", "occ_taylor"),
+                       dataset: str = "lfw") -> dict:
+    """stage_comparison.csv / .md and stage_comparison.png (one panel per method, one line per stage)."""
+    from matplotlib.figure import Figure   # no pyplot: works without a GUI backend
+
+    from .prune_run import METHOD_LABEL, METHODS
+
+    out = Path(resolve(out_dir))
+    out.mkdir(parents=True, exist_ok=True)
+    runs = load_runs(list(run_dirs))
+    t = stage_table(runs, dataset)
+    t.to_csv(out / "stage_comparison.csv", index=False)
+
+    cells = t.assign(cell=[f"{m:.2f} ± {s:.2f}" if n > 1 else f"{m:.2f}"
+                           for m, s, n in zip(t["mean"], t["sd"].fillna(0), t["n_seeds"])])
+    wide = cells.pivot_table(index=["method", "sparsity"], columns="stage", values="cell", aggfunc="first")
+    wide = wide[[s for s in STAGES if s in wide.columns]]
+    order = [(m, sp) for m in METHODS for sp in sorted(t.sparsity.unique())]
+    wide = wide.reindex([o for o in order if o in wide.index])
+    if "gap_closed" in t:
+        gap = t.drop_duplicates(["method", "sparsity"]).set_index(["method", "sparsity"]).gap_closed
+        wide["gap closed by BN"] = [f"{100 * gap[i]:.0f}%" if pd.notna(gap.get(i)) else "" for i in wide.index]
+    wide.index = [f"{METHOD_LABEL[m]} @ {int(round(sp * 100))}%" for m, sp in wide.index]
+    wide = wide.rename(columns=STAGE_TITLE)
+    (out / "stage_comparison.md").write_text(_markdown(wide.fillna("")), encoding="utf-8")
+
+    dense = float(np.mean([100 * np.mean([r["dense"]["metrics"][dataset][c]["acc"] for c in REGIONS])
+                           for r in runs.values()]))
+    methods = [m for m in methods if m in set(t.method)]
+    fig = Figure(figsize=(3.6 * len(methods), 3.6))
+    axes = fig.subplots(1, len(methods), sharey=True)
+    axes = np.atleast_1d(axes)
+    for ax, m in zip(axes, methods):
+        ax.axhline(dense, color="#8a8a85", lw=1.2, ls=":", label="Dense-Aug", zorder=1)
+        for stage, (color, marker, ls) in STAGE_STYLE.items():
+            r = t[(t.method == m) & (t.stage == stage)].sort_values("sparsity")
+            if len(r):
+                ax.plot(100 * r.sparsity, r["mean"], color=color, marker=marker, ms=6, lw=2, ls=ls,
+                        label=STAGE_TITLE[stage], zorder=3)
+        ax.set_title(METHOD_LABEL[m], fontsize=10)
+        ax.set_xlabel("layerwise sparsity (%)")
+        ax.grid(alpha=0.25, lw=0.6)
+        ax.spines[["top", "right"]].set_visible(False)
+    axes[0].set_ylabel("LFW four-region mean (%)" if dataset == "lfw" else "region mean (%)")
+    handles, labels = axes[0].get_legend_handles_labels()
+    fig.legend(handles, labels, loc="lower center", ncol=len(labels), frameon=False, fontsize=8.5,
+               bbox_to_anchor=(0.5, -0.02))
+    fig.suptitle("Where the one-shot accuracy goes: BatchNorm statistics vs weights (mean over scoring seeds)",
+                 fontsize=11)
+    fig.tight_layout(rect=(0, 0.07, 1, 1))
+    fig.savefig(out / "stage_comparison.png", dpi=200, bbox_inches="tight")
+    return {"table": out / "stage_comparison.csv", "markdown": out / "stage_comparison.md",
+            "figure": out / "stage_comparison.png"}
 
 
 # =============================================================================

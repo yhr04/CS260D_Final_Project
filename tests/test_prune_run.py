@@ -109,3 +109,55 @@ def test_reject_split_with_correct_seed_but_different_identities(tmp_path):
         verify_checkpoint_split(other, {"seed": 42})
     with pytest.raises(ValueError, match="Split hash"):
         verify_checkpoint_split(other, {"seed": 42, "split_sha256": "incorrect"})
+
+
+def test_bn_recalibration_reestimates_running_mean_without_touching_weights():
+    from occprune.prune_run import bn_recal_indices, recalibrate_bn_
+    from occprune.transforms import preprocess, to_tensor_images
+
+    cfg = load_config()
+    cfg["train"].update(amp="off", channels_last=False, batch_size=4, hflip=False)
+    cfg["occlusion"]["train_prob"] = 0.0
+    torch.manual_seed(0)
+    model = nn.Sequential(nn.Conv2d(3, 2, 1, bias=False), nn.BatchNorm2d(2))
+    model[1].running_mean.fill_(5.0)
+    weight = model[0].weight.detach().clone()
+    images = np.random.default_rng(0).integers(0, 256, (12, 112, 112, 3), dtype=np.uint8)
+    idx = bn_recal_indices(np.arange(12), 12, seed=0)
+    info = recalibrate_bn_(model, images, idx, cfg, 0, torch.device("cpu"))
+    with torch.no_grad():
+        features = model[0](preprocess(to_tensor_images(images, "cpu")))
+    assert info["batches"] == 3 and info["bn_layers"] == 1
+    assert torch.allclose(model[1].running_mean, features.mean((0, 2, 3)), atol=1e-5)
+    assert torch.equal(model[0].weight, weight) and model[1].momentum == 0.1
+    with pytest.raises(ValueError):
+        bn_recal_indices(np.arange(12), 13, seed=0)
+
+
+def _synthetic_run(seed, stages):
+    """Minimal result.json: one method / sparsity, LFW regions only, accuracy given per stage."""
+    from occprune.faceverif import REGIONS
+
+    def entry(acc):
+        return {"metrics": {"lfw": {c: {"acc": acc, "acc_std": 0.0, "auc": acc, "tar_at_far1e-3": acc}
+                                    for c in REGIONS}},
+                "parameters": {"prunable_nonzero": 1}}
+    return {"scoring_seed": seed, "dense": entry(0.95),
+            "methods": {"magnitude": {"sparsities": {"s0.6": {s: entry(a) for s, a in stages.items()}}}}}
+
+
+def test_stage_report_counts_overlapping_one_shot_once_and_reports_gap_closed(tmp_path):
+    from occprune.prune_report import stage_table, write_stage_report
+
+    runs = {"bn": _synthetic_run(42, {"one_shot": 0.60, "bn_recal": 0.80}),
+            "ft": _synthetic_run(42, {"one_shot": 0.60, "fine_tuned": 0.90})}
+    t = stage_table(runs).set_index("stage")
+    assert t.loc["one_shot", "n_seeds"] == 1 and t.loc["one_shot", "mean"] == pytest.approx(60)
+    assert t.loc["bn_recal", "gap_closed"] == pytest.approx(20 / 30)
+    for name, r in runs.items():
+        (tmp_path / name).mkdir()
+        (tmp_path / name / "result.json").write_text(json.dumps(r))
+    written = write_stage_report([str(tmp_path / "bn"), str(tmp_path / "ft")], tmp_path / "stages",
+                                 methods=("magnitude",))
+    assert all(p.is_file() for p in written.values())
+    assert "67%" in written["markdown"].read_text(encoding="utf-8")

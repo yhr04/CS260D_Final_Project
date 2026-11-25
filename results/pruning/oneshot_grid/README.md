@@ -7,6 +7,8 @@ at 50 / 60 / 70 / 80% (pair-level bootstrap CI above zero in 22–24 of 24 seed 
 α-weighted OAGP (+0.9 to +4.9 pp). Clean and occluded Taylor importance were highly but not perfectly aligned
 (parameter-weighted Spearman **0.964**).
 
+Re-estimating BatchNorm statistics after pruning, with no weight update, recovers most of the gradient methods' collapse but leaves this ranking intact; see the [BN recalibration grid](../bnrecal_grid/README.md).
+
 ## Four-region LFW mean (%), mean over scoring seeds 42–44
 
 | Method | 50% | 60% | 70% | 80% | 90% |
