@@ -1,5 +1,7 @@
 # Dense-Aug one-shot pruning on LFW
 
+> **Superseded.** This early 50% run (Apple MPS) is kept for reference and is still the control for the [calibration-selection study](../calibration_selection/README.md). For the comparison of all seven methods across sparsity, see the [one-shot grid](../oneshot_grid/README.md).
+
 Training seed 42, scoring seeds 42, 43 and 44. All methods start from the same [CASIA Dense-Aug checkpoint](https://github.com/yhr04/CS260D_Final_Project/releases/tag/dense-baselines-seed42). We compare four fixed region masks on the second face in each pair. The primary contrast, OAGP-max minus α-weighted OAGP on the four-region mean, averaged **+1.23 percentage points** (sample SD 0.33 pp). The corresponding contrast against magnitude was **-1.15 pp**.
 
 | Method | Clean (%) | Mean of square 10% and 30% | Square 50% | Mean of four regions |

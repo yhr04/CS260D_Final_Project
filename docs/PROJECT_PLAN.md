@@ -175,25 +175,25 @@ $$S_j = (1-\alpha)\,\tilde I^{clean}_j + \alpha\,\tilde I^{occ}_j,\qquad \alpha 
 |---|---|---|---|
 | ★E0 | 下载数据，检查格式，memmap 缓存，留出验证对，固定遮挡，测吞吐 | 工程准备 | ✅ 完成（notebook 01） |
 | ★E1 | 训练 Dense-Clean / Dense-Aug，LFW 等干净 + 遮挡验证，然后**冻结** Dense-Aug | 剪枝起点 | ✅ 完成（seed 42，notebook 02，第 8 节） |
-| ★E2 | Magnitude 稀疏度扫描 {50, 70, 80, 90, 95}%，不微调 | 找拐点 | 待做 |
-| ★E3 | 7 种方法 × 拐点附近 2 个稀疏度 × {不微调, 增强微调} | **主对比** | 待做（摘要至少给出不微调结果） |
-| ★E4 | 干净与遮挡重要性的 Spearman 相关、各层 top-k 掩码重叠率 | 解释差异 | 待做 |
-| E5 | 按区域遮挡（双眼、口鼻、上半脸、下半脸）上的对比分析 | 优势是否只是匹配了训练遮挡分布 | 待做（评估已自动包含这些条件） |
-| E6 | α ∈ {0, .25, .5, .75, 1}（按验证集选）；OAGP-SNR；估计器消融（逐样本 vs mini-batch，Taylor vs Fisher） | 融合方式是否重要 | 待做 |
-| E7 | E3 的关键对比用 3 个打分种子重复 | 稳健性 | 待做 |
-| E8 | 打分预算 128 / 1024 / 4096 | 预算对结论的影响 | 待做 |
+| ★E2 | 稀疏度扫描 {50, 60, 70, 80, 90}%，不微调（全部 7 种方法） | 找拐点 | ✅ 完成（3 个打分种子，`results/pruning/oneshot_grid/`）；拐点在 60–70% |
+| ★E3 | 7 种方法 × 拐点附近 2 个稀疏度 × {不微调, 增强微调} | **主对比** | ✅ 完成（60% / 70%，微调 1 epoch，`results/pruning/finetune_grid/`） |
+| ★E4 | 干净与遮挡重要性的 Spearman 相关、各层 top-k 掩码重叠率 | 解释差异 | ✅ 完成（`oneshot_grid/bank_agreement.*`） |
+| E5 | 按区域遮挡（双眼、口鼻、上半脸、下半脸）上的对比分析 | 优势是否只是匹配了训练遮挡分布 | ✅ 完成（所有表都含四种区域及其平均） |
+| E6 | α ∈ {0, .25, .5, .75, 1}（按验证集选）；OAGP-SNR；估计器消融（逐样本 vs mini-batch，Taylor vs Fisher） | 融合方式是否重要 | ✅ α 扫描完成（`results/pruning/alpha_sweep/`）；OAGP-SNR 与估计器消融未做 |
+| E7 | E3 的关键对比用 3 个打分种子重复 | 稳健性 | ✅ 完成（E2、E3、E6 都是 42/43/44 三个种子） |
+| E8 | 打分预算 128 / 1024 / 4096 | 预算对结论的影响 | ✅ 改为 256 / 512 / 1024，50% 稀疏度（`results/pruning/calibration_selection/`） |
 | E9（可选） | Wanda 式激活准则 × {干净, 遮挡, 混合} 校准数据 | 结论是否适用于不需要梯度的准则 | 可选 |
-| E10（可选） | 打分样本选择：随机 / 高 loss / 梯度 coreset | 与课程 coreset 内容联系 | 可选 |
+| E10（可选） | 打分样本选择：随机 / 高 loss / 梯度 coreset | 与课程 coreset 内容联系 | ✅ 完成：6 种选择器（随机、facility location、k-center、GreeDi、Greedy-Merge、Sieve），50% 稀疏度 |
 | E11（可选） | ROF 真实遮挡测试 | 合成遮挡结论能否推广到真实遮挡 | 可选 |
 
 **需要的图：**
 1. Dense-Clean vs Dense-Aug：各遮挡条件下的验证准确率（✅ `figures/dense_lfw_seed42.png`）
-2. 主对比：各方法在各遮挡条件下的分组柱状图（含置信区间）
-3. 性能 vs 稀疏度：干净 / 遮挡分别一组曲线，不微调与微调分开
-4. α 消融曲线
+2. 主对比：各方法在各遮挡条件下的结果（✅ 表格 `results/pruning/*/summary_lfw_*.md`，配对 CI 在 `bootstrap_lfw.csv`；柱状图待做）
+3. 性能 vs 稀疏度：干净 / 遮挡分别一组曲线，不微调与微调分开（✅ `results/pruning/oneshot_grid/sparsity_lfw_one_shot.png`、`finetune_grid/sparsity_lfw_fine_tuned.png`）
+4. α 消融曲线（✅ `results/pruning/alpha_sweep/alpha_sweep.png`）
 5. 遮挡样例图（✅ `figures/occlusion_conditions.png`）
-6. 干净 vs 遮挡重要性：分布、相关散点、逐层掩码重叠率
-7. 打分时间与预算
+6. 干净 vs 遮挡重要性：逐层 Spearman 与掩码重叠率（✅ `results/pruning/oneshot_grid/bank_agreement.png`；分布与散点图待做）
+7. 打分时间与预算（✅ `results/pruning/calibration_selection/`）
 
 ---
 
@@ -208,6 +208,15 @@ $$S_j = (1-\alpha)\,\tilde I^{clean}_j + \alpha\,\tilde I^{occ}_j,\qquad \alpha 
 5. 在按区域遮挡这类未见过的遮挡上，遮挡感知准则的优势会缩小但不消失。
 6. 若干净与遮挡重要性的掩码重叠率很高（> 90%），任何融合方式都不会带来明显差异——本身就是有价值的结论。
 
+**跑完后的检验**（数字见第 8.2 节）：
+
+1. **基本成立。** 50% 时 Magnitude、Occ-Taylor、OAGP-max 相差约 1 个百分点；但 Clean-Taylor 已经低 6.7 个百分点，Random 完全崩溃。各方法从 60% 起明显分开。
+2. **成立。** 不微调时最多相差约 27 个百分点；微调 1 epoch 后，除 Random 外都在 0.4 个百分点以内。
+3. **部分不成立。** 不微调时 Occ-Taylor 比 Clean-Taylor 高 5–11 个百分点，远大于预期；微调后只剩约 0.2 个百分点，与预测一致。
+4. **成立，且方向明确。** 保留权重重叠 85–89%（50–70%），不算极高；验证集选出的 α 是 0.75–1，说明干净分数信息量较低。OAGP-SNR 未做。
+5. **成立。** 50% 稀疏度下，Occ − Clean 在 50% 方块上是 +19.0，在四种区域平均上是 +5.5：优势缩小但不消失。
+6. **重叠率低于 90%**（50% 时 89%，90% 时 79%），融合方式确实有影响：OAGP-max 比 OAGP 最多高 4.9 个百分点。但最好的做法是只用遮挡分数，而不是融合。
+
 ---
 
 ## 7. 代码与工作约定
@@ -217,7 +226,7 @@ $$S_j = (1-\alpha)\,\tilde I^{clean}_j + \alpha\,\tilde I^{occ}_j,\qquad \alpha 
   - `02_dense_baselines`：Dense-Clean / Dense-Aug 训练与验证（E1）
   - `03_pruning`：7 种方法的统一剪枝入口（`prune_run`），E2 扫描、E3 主对比、E5；E4 用 `prune_report.bank_agreement`
   - `04_calibration_selection`：打分样本选择（coreset 类选择器 × 预算，E8 / E10）
-  - 之后的消融（α、打分种子等，E6、E7）沿用 `prune_run` 与 `prune_report`，新 notebook 依次编号
+  - α 扫描与多打分种子（E6、E7）也在 `03_pruning` 中运行和查看；`prune_report.write_grid_report` / `write_alpha_report` 生成 `results/pruning/` 下的表和图
 - 训练时间长：notebook 中设置 `RETRAIN` 开关，训练每个 epoch 保存 checkpoint，可断点续训；也可在终端运行 `python -m occprune.pipeline train --mode aug`，不依赖 VS Code 窗口。
 - 所有超参数在 `configs/default.yaml`；结果 JSON 记录完整配置和软硬件版本。
 - `results/`、`figures/` 进 git；`data/`、`checkpoints/` 不进 git。
@@ -227,7 +236,9 @@ $$S_j = (1-\alpha)\,\tilde I^{clean}_j + \alpha\,\tilde I^{occ}_j,\qquad \alpha 
 
 ---
 
-## 8. 当前结果：Dense 基线（E1，seed 42，20 epochs）
+## 8. 当前结果
+
+### 8.1 Dense 基线（E1，seed 42，20 epochs）
 
 **环境：** Windows 11，RTX 3070 Ti Laptop GPU（8 GB），PyTorch 2.9.1 + CUDA 12.8，Python 3.12。纯训练时间 Dense-Clean 41 分钟、Dense-Aug 54 分钟。
 
@@ -247,6 +258,31 @@ LFW 验证准确率（%，10 折 mean ± std；每对第二张图遮挡）：
 3. Dense-Aug 在第 20 个 epoch 仍在提升（选中最后一个 epoch），若时间允许可加长训练；但剪枝比较只需要一个固定起点，暂不重训。
 4. LFW 干净准确率 98.9% 接近饱和；方块 30/50% 和区域遮挡上的区分度足够用于剪枝对比。
 
+### 8.2 剪枝（E2–E8，Dense-Aug 起点，打分种子 42/43/44）
+
+LFW 四种区域遮挡平均准确率（%，3 个种子平均；Dense-Aug 未剪枝为 95.66）：
+
+| 方法 | 50% | 60% | 70% | 80% | 90% | 60% 微调后 | 70% 微调后 |
+|---|---|---|---|---|---|---|---|
+| Random | 56.93 | 54.87 | 54.08 | 54.11 | 53.05 | 93.53 | 91.77 |
+| Magnitude | **94.93** | **93.21** | **86.68** | **67.83** | **58.58** | 95.31 | 95.18 |
+| Clean-Taylor | 88.19 | 66.63 | 54.19 | 52.75 | 54.69 | 95.29 | 95.02 |
+| Occ-Taylor | 93.73 | 79.25 | 59.47 | 58.91 | 54.80 | 95.33 | 95.18 |
+| Mixed-Taylor | 93.71 | 74.49 | 55.40 | 57.42 | 54.80 | 95.37 | 95.17 |
+| OAGP（α=0.5） | 92.82 | 73.25 | 55.63 | 54.63 | 53.73 | **95.43** | 95.16 |
+| OAGP-max | 93.76 | 78.79 | 56.44 | 57.36 | 53.80 | 95.39 | 95.17 |
+
+**观察**
+
+1. **打分数据很重要**：不微调时 Occ-Taylor 比 Clean-Taylor 高 +6.2 / +11.5 / +4.8 / +4.5 个百分点（50–80%），每个稀疏度 24 个"种子 × 条件"比较中有 22–24 个配对 bootstrap CI 大于 0。微调后差距缩小到 +0.2，但没有反转（48 个比较里 14 个显著为正，0 个为负）。
+2. **不微调时 Magnitude 最稳**：60% 起所有 Taylor 类方法大幅下降，Magnitude 在 70% 仍有 86.7。可能原因：一次剪掉大量权重后 BatchNorm 统计量失效，而 Taylor 分数是剪枝前的一阶局部近似。微调后差距几乎消失，支持这一解释（可用 BN 重校准直接检验）。
+3. **融合不如只用遮挡分数**：OAGP-max 好于 OAGP，α 扫描在验证集上选出 0.75（50%）和 1（60%、70%），OAGP-max ≈ Occ-Taylor。
+4. **干净与遮挡重要性高度相关但不相同**：按参数量加权的 Spearman 0.964，保留权重 Jaccard 为 0.887 / 0.846 / 0.792（50 / 70 / 90%），遮挡输入的分数平均是干净输入的 1.72 倍。
+5. **打分样本选择影响很小**：6 种 coreset 类选择器中最好的（Sieve）比随机只高 +0.41（OAGP）/ +0.09（OAGP-max），在种子波动之内。
+6. **局限**：只有一个 dense 训练种子；微调种子固定（Magnitude 微调后三次结果相同）；剪枝后的模型只在 LFW 和 CASIA 验证对上评估；非结构化稀疏不带来实际加速；遮挡都是合成的。
+
+详细表格、图和复现命令见 `results/pruning/oneshot_grid/`、`finetune_grid/`、`alpha_sweep/`、`calibration_selection/` 下的 README。
+
 ---
 
 ## 9. 时间表与分工
@@ -254,15 +290,15 @@ LFW 验证准确率（%，10 折 mean ± std；每对第二张图遮挡）：
 | 日期 | 任务 | 负责 |
 |---|---|---|
 | 11/21 | ✅ E0 数据与缓存；✅ E1 Dense 基线；全组配环境、复现 notebook 01、02 | 全组 |
-| 11/22 | 实现剪枝模块（掩码、稀疏度校验、逐样本 Taylor、OAGP）与单元测试 | B、C |
-| 11/23 | E2 Magnitude 扫描找拐点；剪枝后增强微调流程 | B / A |
-| 11/23–26 | E3 主对比、E4 重要性分析、E5 区域遮挡分析 | A、B、C |
+| 11/22 | ✅ 实现剪枝模块（掩码、稀疏度校验、逐样本 Taylor、OAGP）与单元测试 | B、C |
+| 11/23 | ✅ E2 稀疏度扫描找拐点；✅ 剪枝后增强微调流程 | B / A |
+| 11/23–26 | ✅ E3 主对比、✅ E4 重要性分析、✅ E5 区域遮挡分析 | A、B、C |
 | 11/24–27 | 相关工作、摘要初稿、slides 框架 | D、E |
 | 11/28–29 | 用 E1–E4 的真实结果完成一页摘要 | 全组 |
 | **11/30 中午** | **提交摘要** | D |
 | 11/30–12/2 | 完成 slides、彩排、Q&A 准备（第 10 节） | 全组 |
 | 12/1 或 12/3 | 展示，记录 TA 反馈 | 全组 |
-| 12/2–8 | E6、E7、E8；可选 E9–E11 | A、B、C |
+| 12/2–8 | ✅ E6 α 扫描、✅ E7、✅ E8 / E10（已提前完成）；可选：BN 重校准分析、高稀疏度微调、E9、E11 | A、B、C |
 | 12/7–11 | 报告写作与定稿，写清每位成员的贡献 | 全组 |
 
 **角色建议**（syllabus 要求每人都参与想法、实现、展示和写作，以下只是主责）：

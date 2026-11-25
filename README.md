@@ -10,10 +10,15 @@ ResNet-18 face model is pruned to the same sparsity with the same gradient-scori
 
 | Experiment | Read the results | Open the notebook |
 | --- | --- | --- |
-| 50% one-shot pruning | [Dense-Aug, Magnitude, OAGP and OAGP-max](results/pruning/one_shot_seed42/README.md) | [03 · Run any of the seven pruning methods](notebooks/03_pruning.ipynb) |
+| One-shot pruning, 50–90% sparsity, 7 methods × 3 seeds | [Sparsity curves, paired contrasts, clean vs occluded importance](results/pruning/oneshot_grid/README.md) | [03 · Pruning runner and saved results](notebooks/03_pruning.ipynb) |
+| Pruning + 1 epoch of fine-tuning at 60% and 70% | [Recovery after fine-tuning](results/pruning/finetune_grid/README.md) | [03 · Pruning runner and saved results](notebooks/03_pruning.ipynb) |
+| OAGP fusion weight α | [α ∈ {0, 0.25, 0.5, 0.75, 1}, chosen on validation](results/pruning/alpha_sweep/README.md) | [03 · Pruning runner and saved results](notebooks/03_pruning.ipynb) |
 | Calibration photo selection for OAGP and OAGP-max | [Six selectors at 256, 512 and 1,024 photos](results/pruning/calibration_selection/README.md) | [04 · Explore results or rerun pruning](notebooks/04_calibration_selection.ipynb) |
-| Random pruning at 50% | [Accuracy by occlusion across three seeds](results/random50/lfw_summary.csv) | [03 · Random only](notebooks/03_random_pruning.ipynb) |
 | Dense baselines | [Dense-Clean and Dense-Aug verification results](results/baseline_table_seed42.md) | [02 · Train and evaluate](notebooks/02_dense_baselines.ipynb) |
+
+Earlier 50% runs, kept for reference and superseded by the grids above:
+[one-shot Dense-Aug / Magnitude / OAGP / OAGP-max on Apple MPS](results/pruning/one_shot_seed42/README.md) and
+[Random at 50%](results/random50/lfw_summary.csv) ([notebook](notebooks/03_random_pruning.ipynb)).
 
 Notebook 04 opens the saved results without a GPU, weights or face images. To run pruning from the
 checkpoint, follow the [environment setup](#environment), [download the data](#data), build the cache
@@ -21,10 +26,19 @@ with [01 · Data preparation](notebooks/01_data.ipynb) and get the [Dense-Aug we
 For implementation details, see the [pruning scores and masks](src/occprune/pruning.py),
 [calibration selectors](src/occprune/calibration_selection.py) and [default settings](configs/default.yaml).
 
-**Main finding.** With 50% layerwise sparsity and zero fine-tuning, Magnitude reached **94.93%** mean LFW
-verification accuracy across four held-out facial occlusions. At 1,024 calibration photos, Sieve-Streaming
-gave the highest mean among the six selectors for OAGP (**92.97%**) and OAGP-max (**93.87%**).
-On the 50%-area square alone, OAGP-max with Sieve reached **89.51%** and Magnitude reached **89.17%**.
+**Main findings** (LFW, mean accuracy over four held-out facial occlusions, three scoring seeds; Dense-Aug 95.66%):
+
+1. **Occluded calibration data beats clean data for gradient-based importance.** Without fine-tuning, Occ-Taylor beat
+   Clean-Taylor by +6.2 / +11.5 / +4.8 pp at 50 / 60 / 70% sparsity (pair-level CIs above zero in 22–24 of 24 cells).
+   After one epoch of fine-tuning the gap shrinks to about +0.2 pp but never reverses.
+2. **Magnitude is the most robust one-shot criterion.** It kept 93.21% at 60% and 86.68% at 70%, while every Taylor
+   variant fell below 80% and 60%.
+3. **Fine-tuning erases most differences.** At 60–70% sparsity all methods except Random recover to 95.0–95.4%.
+4. **Fusing clean and occluded scores does not help.** OAGP-max beats α-weighted OAGP, validation picks α = 0.75–1
+   (mostly occluded), and OAGP-max ≈ Occ-Taylor. Clean and occluded importance are closely aligned (Spearman 0.96;
+   79–89% of kept weights shared).
+5. **Choosing calibration photos matters little.** At 50% sparsity the best of six coreset-style selectors (Sieve-Streaming)
+   gains only +0.41 / +0.09 pp over random photos for OAGP / OAGP-max, within seed variation.
 
 **Protocol** (as in the occluded-face-recognition literature, e.g. PDSN, FROM): train on **CASIA-WebFace**
 (112×112 aligned, 10.5K identities, 481K training images), test **face verification on LFW** (6000 pairs, standard
@@ -41,8 +55,14 @@ Project plan, experimental design and timeline: [`docs/PROJECT_PLAN.md`](docs/PR
 |---|---|---|
 | E0 | Data download, memmap cache, held-out validation pairs, fixed test occlusions, throughput | done |
 | E1 | Dense-Clean / Dense-Aug (ResNet-18 + CosFace), clean + occluded verification | done (seed 42) |
-| E2–E4 | Pruning: all 7 methods in one runner (`prune_run`), sparsity sweep, main comparison, importance analysis | runner done; first 50% one-shot comparison done |
-| E5+ | Region occlusions, α / budget ablations, optional extensions | calibration selection and budget comparison complete at 50% sparsity; α sweep planned |
+| E2 | Sparsity sweep 50–90%, all 7 methods, no fine-tuning | done (3 scoring seeds) |
+| E3 | Main comparison at 60% / 70%, one-shot and after 1 epoch of fine-tuning | done (3 scoring seeds) |
+| E4 | Clean vs occluded importance: Spearman, kept-weight overlap per layer | done |
+| E5 | Held-out region occlusions | done (in every table) |
+| E6 | OAGP α sweep {0, 0.25, 0.5, 0.75, 1} | done; OAGP-SNR and estimator ablations not run |
+| E7 | Three scoring seeds | done |
+| E8 / E10 | Calibration budget 256 / 512 / 1,024 and six photo selectors | done at 50% sparsity |
+| — | Not run: second dense training seed, fine-tuning seeds, AgeDB / CALFW / CPLFW for pruned models, E9 (Wanda), E11 (real occlusion) | listed as limitations |
 
 ## Dense baseline results (seed 42, LFW verification accuracy, %)
 
@@ -148,14 +168,19 @@ The [pruning runner](src/occprune/prune_run.py) supports Random, Magnitude, Clea
 Mixed-Taylor, OAGP and OAGP-max. It computes each score once and reuses it at every sparsity.
 
 ```bash
-python -m occprune.prune_run --checkpoint checkpoints/dense_aug_seed42.pt --output results/pruning/runs/e3_score42     --sparsity 0.7 0.8 --scoring-seed 42 --ft-epochs 1 --test-set lfw
+python -m occprune.prune_run --checkpoint checkpoints/dense_aug_seed42.pt --output results/pruning/runs/finetune_grid_score42 \
+    --sparsity 0.6 0.7 --scoring-seed 42 --ft-epochs 1 --test-set lfw
 ```
+
+Each results README under `results/pruning/` lists the exact commands behind its runs. One-shot runs take about
+10–20 minutes per seed on an RTX 3070 Ti Laptop GPU, and fine-tuning adds about 2 minutes per method and sparsity.
 
 Defaults (B=1024, α=0.5, fine-tuning lr 0.01 with cosine decay) live in the `prune` section of
 `configs/default.yaml`. Leave out `--test-set lfw` while choosing settings on the held-out CASIA pairs.
 Each output directory holds `result.json` and `pair_similarities.npz` (tracked) plus `condition_scores.npz`
 and `masks.npz` (large, git-ignored). `occprune.prune_report` builds the tables (`metrics_table`,
 `summary_table`), paired bootstrap CIs and the clean-vs-occluded importance analysis (`bank_agreement`).
+`write_grid_report` writes every table and figure for a set of runs, and `write_alpha_report` builds the α sweep.
 
 All logic lives in `src/occprune/`; notebooks only call it. In notebook 02, `RETRAIN = True` retrains (otherwise
 saved results are reused). Hyper-parameters come from `configs/default.yaml` and can be overridden in the
