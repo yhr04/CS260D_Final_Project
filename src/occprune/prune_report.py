@@ -17,16 +17,12 @@ import numpy as np
 import pandas as pd
 import torch
 
-from .faceverif import verification_metrics
+from .faceverif import REGIONS, verification_metrics
+from .prune_run import sparsity_key
 from .pruning import layerwise_masks, mean_banks
 from .utils import resolve
 
-REGIONS = ("eyes", "mouth_nose", "upper_half", "lower_half")
 CONDITION_ORDER = ("clean", "square10", "square30", "square50", *REGIONS)
-
-
-def _sparsity_key(s: float) -> str:
-    return f"s{float(s):g}"
 
 
 def load_runs(pattern) -> dict[str, dict]:
@@ -85,7 +81,7 @@ def paired_bootstrap(run_dir, method_a: str, method_b: str, *, sparsity: float, 
                      dataset: str = "lfw", conditions=CONDITION_ORDER, n_boot: int = 2000, seed: int = 0) -> pd.DataFrame:
     """acc(B) - acc(A) with a 95% CI over resampled pairs, each model using its own fold thresholds.
     method 'dense' refers to the unpruned model."""
-    key = _sparsity_key(sparsity)
+    key = sparsity_key(sparsity)
     with np.load(Path(resolve(run_dir)) / "pair_similarities.npz") as z:
         same, folds = z[f"{dataset}/issame"], z[f"{dataset}/fold"]
 

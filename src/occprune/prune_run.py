@@ -27,7 +27,6 @@ from __future__ import annotations
 
 import argparse
 import copy
-import hashlib
 import tempfile
 from pathlib import Path
 
@@ -35,14 +34,18 @@ import numpy as np
 import torch
 
 from .data import casia_split_path, check_casia_split, load_casia, load_pairs, train_indices_and_labels
-from .faceverif import dataset_seed, evaluate_pairs, pair_conditions
+from .faceverif import dataset_seed, drop_per_pair, embed_kwargs, evaluate_pairs, pair_conditions
 from .occlusion import sample_train_boxes
-from .pipeline import _embed_kw, _epoch_batches, _loader, _lr_lambda, _param_groups, _strip, _train_step, load_checkpoint
+from .pipeline import load_checkpoint
+from .protocol import (
+    calibration_draw, file_sha256, load_fixed_conditions, parameter_counts, scoring_views,
+    verify_checkpoint_split,
+)
 from .pruning import (
     apply_masks_, condition_scores, enforce_masks_, layerwise_masks, magnitude_scores,
-    mean_banks, prunable_layers, random_scores, taylor_scores,
+    mean_banks, random_scores, taylor_scores,
 )
-from .transforms import preprocess, to_tensor_images
+from .training import epoch_batches, lr_lambda, make_loader, param_groups, train_step
 from .utils import Timer, env_info, get_device, load_config, resolve, save_json, set_seed
 
 METHODS = ("random", "magnitude", "clean_taylor", "occ_taylor", "mixed_taylor", "oagp", "oagp_max")
@@ -55,70 +58,6 @@ BANKS_USED = {"random": (), "magnitude": (), "clean_taylor": ("clean_A", "clean_
 
 def sparsity_key(s: float) -> str:
     return f"s{float(s):g}"
-
-
-def _file_hash(path):
-    digest = hashlib.sha256()
-    with path.open("rb") as f:
-        for block in iter(lambda: f.read(1024 * 1024), b""):
-            digest.update(block)
-    return digest.hexdigest()
-
-
-def _fixed_conditions(path, expected):
-    """Check the published rectangles against the selected protocol and use the saved arrays."""
-    with np.load(path, allow_pickle=False) as saved:
-        if set(saved.files) != set(expected) - {"clean"}:
-            raise ValueError(f"Unexpected evaluation conditions in {path}")
-        result = {"clean": None}
-        for name, rects in expected.items():
-            if rects is not None:
-                value = saved[name]
-                if not np.array_equal(value, rects):
-                    raise ValueError(f"{name} rectangles disagree with checkpoint protocol in {path}")
-                result[name] = value
-    return result
-
-
-def _checkpoint_split(path, meta):
-    seed = int(meta["seed"])
-    digest = _file_hash(path)
-    with np.load(path, allow_pickle=False) as z:
-        split = dict(z)
-    if int(split["seed"]) != seed:
-        raise ValueError("Split seed differs from checkpoint metadata")
-    if "split_sha256" in meta:
-        if digest != meta["split_sha256"]:
-            raise ValueError("Split hash differs from checkpoint metadata")
-    else:
-        # Earlier team checkpoints identify their training split only by seed.
-        canonical = casia_split_path(seed)
-        if canonical.is_file() and path.resolve() != canonical.resolve():
-            with np.load(canonical, allow_pickle=False) as saved:
-                if set(split) != set(saved.files) or any(not np.array_equal(split[k], saved[k]) for k in saved.files):
-                    raise ValueError("Override differs from the repository split used by this checkpoint")
-    return split, digest
-
-
-def _calibration(train_idx, budget, seed, ratio):
-    """Halves A and B of `budget` distinct originals plus occlusion boxes for both halves.
-    The draw of (A, B, boxes_B) is unchanged from the first team run; boxes_A use their own stream."""
-    if budget < 2 or budget % 2 or budget > len(train_idx):
-        raise ValueError("Budget must be positive, even and no greater than the training image count")
-    rng = np.random.default_rng(seed)
-    first, second = np.split(rng.choice(train_idx, size=budget, replace=False), 2)
-    boxes_second = sample_train_boxes(len(second), 1.0, tuple(ratio), 112, 112, rng)
-    boxes_first = sample_train_boxes(len(first), 1.0, tuple(ratio), 112, 112, np.random.default_rng([seed, 1]))
-    return first, second, boxes_first, boxes_second
-
-
-def _views(images, labels, indices, boxes, fill, dev):
-    # Batch preprocessing for I/O locality. taylor_scores differentiates one example at a time.
-    for start in range(0, len(indices), 16):
-        idx = indices[start:start + 16]
-        rects = None if boxes is None else boxes[start:start + len(idx)]
-        x = preprocess(to_tensor_images(images[idx], dev), rects, fill)
-        yield x, torch.as_tensor(labels[idx], device=dev)
 
 
 def _method_scores(method, model, banks, alpha, scoring_seed):
@@ -145,21 +84,21 @@ def _fine_tune(model, head, masks, labels, train_idx, cfg, seed, epochs, lr, war
     set_seed(seed, t["deterministic"])
     g = torch.Generator().manual_seed(seed)
     rng = np.random.default_rng([seed, 7])
-    opt = torch.optim.SGD(_param_groups(model, head, t["weight_decay"]), lr=lr, momentum=t["momentum"])
-    sched = torch.optim.lr_scheduler.LambdaLR(opt, _lr_lambda(epochs * steps, warmup_steps))
+    opt = torch.optim.SGD(param_groups(model, head, t["weight_decay"]), lr=lr, momentum=t["momentum"])
+    sched = torch.optim.lr_scheduler.LambdaLR(opt, lr_lambda(epochs * steps, warmup_steps))
     model.train()
     head.train()
     lrs = []
     with Timer(dev) as timer:
         for _ in range(epochs):
-            batches = _epoch_batches(train_idx, bs, g)
-            for idx, xb in zip(batches, _loader(cfg, batches)):
+            batches = epoch_batches(train_idx, bs, g)
+            for idx, xb in zip(batches, make_loader(cfg, batches, pin_memory=dev.type == "cuda")):
                 boxes = sample_train_boxes(bs, occ["train_prob"], tuple(occ["train_ratio"]), 112, 112, rng)
                 flip = torch.rand(bs, generator=g) < 0.5 if t["hflip"] else None
                 x8 = xb.to(dev, non_blocking=True).permute(0, 3, 1, 2)
                 y = torch.as_tensor(labels[idx], device=dev)
                 lrs.append(opt.param_groups[0]["lr"])
-                loss, _ = _train_step(model, head, opt, sched, x8, y, boxes, flip, cfg)
+                loss, _ = train_step(model, head, opt, sched, x8, y, boxes, flip, cfg)
                 enforce_masks_(model, masks)
                 if not torch.isfinite(loss).item():
                     raise FloatingPointError("Non-finite fine-tuning loss")
@@ -167,26 +106,6 @@ def _fine_tune(model, head, masks, labels, train_idx, cfg, seed, epochs, lr, war
     head.eval()
     return {"steps": steps * epochs, "examples": steps * epochs * bs, "seconds": timer.elapsed,
             "lr": lr, "warmup_steps": warmup_steps, "lr_first": lrs[0], "lr_max": max(lrs), "lr_last": lrs[-1]}
-
-
-def _counts(model, head, masks=None):
-    layers = prunable_layers(model)
-    per_layer = {}
-    for name, layer in layers.items():
-        w = layer.weight.detach()
-        if masks is not None and torch.count_nonzero(w.masked_select(~masks[name])).item():
-            raise RuntimeError(f"Masked weights in {name} are no longer zero")
-        per_layer[name] = {"total": w.numel(), "nonzero": int(torch.count_nonzero(w).item())}
-        if masks is not None:
-            per_layer[name]["kept_by_mask"] = int(masks[name].sum().item())
-    return {
-        "backbone_total": sum(p.numel() for p in model.parameters()),
-        "backbone_nonzero": sum(int(torch.count_nonzero(p).item()) for p in model.parameters()),
-        "prunable_total": sum(v["total"] for v in per_layer.values()),
-        "prunable_nonzero": sum(v["nonzero"] for v in per_layer.values()),
-        "cosface_head_total": sum(p.numel() for p in head.parameters()),
-        "per_layer": per_layer,
-    }
 
 
 def run_pruning(checkpoint, output, *, methods=METHODS, sparsities=(0.5,), cache_dir=None, split_path=None,
@@ -235,21 +154,21 @@ def run_pruning(checkpoint, output, *, methods=METHODS, sparsities=(0.5,), cache
     images, labels = load_casia(cache)
     if len(labels) != len(images) or images.shape[1:] != (112, 112, 3) or images.dtype != np.uint8:
         raise ValueError("Expected aligned uint8 images and matching labels")
-    split, split_hash = _checkpoint_split(split_path, meta)
+    split, split_hash = verify_checkpoint_split(split_path, meta)
     check_casia_split(split, labels)
     train_idx, remapped, n_cls = train_indices_and_labels(labels, split["holdout_ids"])
     if n_cls != meta["n_classes"]:
         raise ValueError("Training label remapping does not match the CosFace checkpoint")
     occ = cfg["occlusion"]
-    first, second, boxes_first, boxes_second = _calibration(train_idx, budget, scoring_seed, occ["train_ratio"])
+    first, second, boxes_first, boxes_second = calibration_draw(train_idx, budget, scoring_seed, occ["train_ratio"])
     val_pairs, val_same, val_fold = split["val_pairs"], split["val_issame"], split["fold"]
     if len(np.unique(val_fold)) < 2:
         raise ValueError("Validation requires multiple held-out folds")
     mask_dir = resolve(masks_dir)
     val_expected = pair_conditions(len(val_pairs), occ["val_ratios"], [], dataset_seed(occ["val_seed"], f"casia{seed}"))
     val_mask_path = mask_dir / f"val_seed{seed}_pair_occlusions.npz"
-    inputs = {"validation": (images, val_pairs, val_same, val_fold, _fixed_conditions(val_mask_path, val_expected))}
-    mask_hashes = {"validation": _file_hash(val_mask_path)}
+    inputs = {"validation": (images, val_pairs, val_same, val_fold, load_fixed_conditions(val_mask_path, val_expected))}
+    mask_hashes = {"validation": file_sha256(val_mask_path)}
     for name in test_sets:
         test = load_pairs(cache, name)
         same = test["issame"]
@@ -257,11 +176,11 @@ def run_pruning(checkpoint, output, *, methods=METHODS, sparsities=(0.5,), cache
         expected = pair_conditions(len(same), occ["test_ratios"], occ["test_regions"], dataset_seed(occ["test_seed"], name))
         path = mask_dir / f"{name}_pair_occlusions.npz"
         folds = np.arange(len(same)) * 10 // len(same)
-        inputs[name] = (test["images"], pairs, same, folds, _fixed_conditions(path, expected))
-        mask_hashes[name] = _file_hash(path)
+        inputs[name] = (test["images"], pairs, same, folds, load_fixed_conditions(path, expected))
+        mask_hashes[name] = file_sha256(path)
 
     result = {
-        "data_label": data_label, "checkpoint": checkpoint.name, "checkpoint_sha256": _file_hash(checkpoint),
+        "data_label": data_label, "checkpoint": checkpoint.name, "checkpoint_sha256": file_sha256(checkpoint),
         "checkpoint_metadata": meta, "config": cfg, "device": str(dev), "environment": env_info(),
         "split_sha256": split_hash, "eval_mask_sha256": mask_hashes,
         "n_train_images": len(train_idx), "n_train_classes": n_cls,
@@ -282,12 +201,12 @@ def run_pruning(checkpoint, output, *, methods=METHODS, sparsities=(0.5,), cache
         sims[f"{name}/issame"], sims[f"{name}/fold"] = same, folds
 
     def evaluate(model, head, masks, prefix):
-        entry = {"parameters": _counts(model, head, masks), "metrics": {}}
+        entry = {"parameters": parameter_counts(model, head, masks), "metrics": {}}
         for name, (data, pairs, same, folds, conditions) in inputs.items():
-            evaluation = evaluate_pairs(model, data, pairs, same, conditions, folds, **_embed_kw(cfg, dev))
+            evaluation = evaluate_pairs(model, data, pairs, same, conditions, folds, **embed_kwargs(cfg, dev))
             if not all(np.isfinite(values).all() for values in evaluation["_sims"].values()):
                 raise FloatingPointError(f"Non-finite pair similarities: {prefix}/{name}")
-            entry["metrics"][name] = _strip(evaluation)
+            entry["metrics"][name] = drop_per_pair(evaluation)
             for cond, values in evaluation["_sims"].items():
                 sims[f"{prefix}/{name}/{cond}"] = values
         return entry
@@ -311,7 +230,7 @@ def run_pruning(checkpoint, output, *, methods=METHODS, sparsities=(0.5,), cache
             if b in needed:
                 idx, bx = views[b]
                 with Timer(dev) as tb:
-                    banks[b] = taylor_scores(scoring_model, dense_head, _views(images, remapped, idx, bx, occ["fill"], dev))
+                    banks[b] = taylor_scores(scoring_model, dense_head, scoring_views(images, remapped, idx, bx, occ["fill"], dev))
                 result["calibration"]["bank_seconds"][b] = tb.elapsed
         del scoring_model
         if save_banks and banks:

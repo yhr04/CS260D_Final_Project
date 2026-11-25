@@ -61,6 +61,7 @@ REGION_RECTS = {
     "upper_half": (0, 0, 56, 112),
     "lower_half": (56, 0, 56, 112),
 }
+REGIONS = tuple(REGION_RECTS)          # held-out region conditions, in reporting order
 
 
 def region_rects(name: str, n: int) -> np.ndarray:
@@ -98,6 +99,13 @@ def save_conditions(conds: dict, name: str):
 
 
 # ----------------------------------------------------------------------------- embeddings
+def embed_kwargs(cfg: dict, device) -> dict:
+    """Keyword arguments of `embed` / `evaluate_pairs` taken from a config's train section."""
+    t = cfg["train"]
+    return dict(device=device, batch_size=t["eval_batch_size"], flip=t["eval_flip"], fill=cfg["occlusion"]["fill"],
+                amp=t["amp"], channels_last=t["channels_last"])
+
+
 @torch.no_grad()
 def embed(
     model: nn.Module,
@@ -207,3 +215,8 @@ def evaluate_pairs(
         sims_all[name] = sims.astype(np.float32)
     out["_sims"] = sims_all
     return out
+
+
+def drop_per_pair(res: dict) -> dict:
+    """evaluate_pairs output without per-pair arrays ("_sims", "correct"), ready for JSON."""
+    return {k: {m: v for m, v in r.items() if m != "correct"} for k, r in res.items() if not k.startswith("_")}

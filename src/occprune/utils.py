@@ -117,20 +117,17 @@ def env_info() -> dict:
         import torch
         import torchvision
 
-        info.update(
-            torch=torch.__version__,
-            torchvision=torchvision.__version__,
-            cuda_available=torch.cuda.is_available(),
-            cuda_version=torch.version.cuda,
-            cudnn_version=torch.backends.cudnn.version() if torch.cuda.is_available() else None,
-            gpu=torch.cuda.get_device_name(0) if torch.cuda.is_available() else None,
-            gpu_memory_gb=(
-                round(torch.cuda.get_device_properties(0).total_memory / 1024**3, 2)
-                if torch.cuda.is_available()
-                else None
-            ),
-            torch_threads=torch.get_num_threads(),
-        )
+        info.update(torch=torch.__version__, torchvision=torchvision.__version__,
+                    cuda_version=torch.version.cuda, torch_threads=torch.get_num_threads())
+        cuda = torch.cuda.is_available()
+        info["cuda_available"] = cuda
+        try:  # device queries can fail even when is_available() is True (e.g. hidden devices)
+            props = torch.cuda.get_device_properties(0) if cuda else None
+            info.update(cudnn_version=torch.backends.cudnn.version() if cuda else None,
+                        gpu=props.name if props else None,
+                        gpu_memory_gb=round(props.total_memory / 1024**3, 2) if props else None)
+        except (AssertionError, RuntimeError) as e:
+            info.update(cudnn_version=None, gpu=None, gpu_memory_gb=None, gpu_error=str(e))
     except ImportError:
         info["torch"] = None
     for mod in ("numpy", "sklearn", "pandas", "matplotlib"):

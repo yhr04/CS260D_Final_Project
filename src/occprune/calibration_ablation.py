@@ -2,24 +2,25 @@
 from __future__ import annotations
 
 import copy
-import hashlib
 import json
-from pathlib import Path
 
 import numpy as np
 import torch
 
-from . import prune_run as pr
-from .calibration_selection import cosine_kernel, select_calibration
-from .faceverif import embed
+from .calibration_selection import STRATEGIES, cosine_kernel, select_calibration
+from .data import check_casia_split, load_casia, load_pairs, train_indices_and_labels
+from .faceverif import REGIONS, dataset_seed, drop_per_pair, embed, embed_kwargs, evaluate_pairs, pair_conditions
+from .pipeline import load_checkpoint
+from .protocol import (
+    array_sha256, calibration_draw, file_sha256, load_fixed_conditions, parameter_counts, scoring_views,
+    verify_checkpoint_split,
+)
 from .pruning import apply_masks_, condition_scores, layerwise_masks, taylor_scores
-from .utils import Timer, resolve
+from .utils import Timer, get_device, resolve, set_seed
 
 STUDY_DIR = "results/pruning/calibration_selection"
 SEEDS = (42, 43, 44)
 BUDGETS = (256, 512, 1024)
-STRATEGIES = ("random", "coreset", "kcenter", "greedi", "greedy_merge", "sieve")
-REGIONS = ("eyes", "mouth_nose", "upper_half", "lower_half")
 LFW_IMAGES_SHA256 = "5300beeeb04a8244a5da7ceef627d7406f5c9a0fc303ee3ffa02b6a3292d07c0"
 LFW_LABELS_SHA256 = "c37b8bcc4e73e0f4cb60cd31df08e54fa687e981ecd23ed5f129f71c41b3c939"
 
@@ -29,45 +30,41 @@ def _check_hash(actual, expected, description):
         raise ValueError(f"{description} differs from the recorded experiment: {actual} (expected {expected})")
 
 
-def _array_hash(array):
-    return hashlib.sha256(memoryview(np.ascontiguousarray(array))).hexdigest()
-
-
 def _training_pool(cache_dir, meta, protocol):
     """Recreate the union of the original 1024-image training draws, including at smaller B."""
     split_path = resolve("results/splits/split_seed42.npz")
-    split, digest = pr._checkpoint_split(split_path, meta)
+    split, digest = verify_checkpoint_split(split_path, meta)
     _check_hash(digest, protocol["split_sha256"], "CASIA training split")
-    images, labels = pr.load_casia(cache_dir)
-    pr.check_casia_split(split, labels)
-    train, remapped, n_classes = pr.train_indices_and_labels(labels, split["holdout_ids"])
+    images, labels = load_casia(cache_dir)
+    check_casia_split(split, labels)
+    train, remapped, n_classes = train_indices_and_labels(labels, split["holdout_ids"])
     if (len(train), n_classes) != (481210, meta["n_classes"]):
         raise ValueError("Unexpected CASIA training population or CosFace class remapping")
 
     draws = {}
     for seed in SEEDS:
-        first, second, _, boxes = pr._calibration(train, 1024, seed, meta["config"]["occlusion"]["train_ratio"])
+        first, second, _, boxes = calibration_draw(train, 1024, seed, meta["config"]["occlusion"]["train_ratio"])
         draws[seed] = np.column_stack((first, second)).ravel(), boxes
     ids = np.unique(np.concatenate([order for order, _ in draws.values()]))
     candidates, targets = images[ids], remapped[ids]
-    _check_hash(_array_hash(ids.astype("<i8")), protocol["candidate_pool_sha256"], "Sorted CASIA photo IDs")
-    _check_hash(_array_hash(targets.astype("<i8")), protocol["labels_sha256"], "Remapped CASIA targets")
-    _check_hash(_array_hash(candidates), protocol["pixels_sha256"], "Decoded training pixels")
+    _check_hash(array_sha256(ids.astype("<i8")), protocol["candidate_pool_sha256"], "Sorted CASIA photo IDs")
+    _check_hash(array_sha256(targets.astype("<i8")), protocol["labels_sha256"], "Remapped CASIA targets")
+    _check_hash(array_sha256(candidates), protocol["pixels_sha256"], "Decoded training pixels")
     return ids, candidates, targets, draws
 
 
 def load_lfw(cache_dir, cfg, protocol):
     """Return the eight fixed test conditions, the 6,000 original pairs and their ten folds."""
-    data = pr.load_pairs(cache_dir, "lfw")
+    data = load_pairs(cache_dir, "lfw")
     images, same = data["images"], data["issame"]
-    _check_hash(_array_hash(images), LFW_IMAGES_SHA256, "Decoded LFW pixels")
-    _check_hash(_array_hash(same), LFW_LABELS_SHA256, "LFW pair labels")
+    _check_hash(array_sha256(images), LFW_IMAGES_SHA256, "Decoded LFW pixels")
+    _check_hash(array_sha256(same), LFW_LABELS_SHA256, "LFW pair labels")
     occ = cfg["occlusion"]
-    expected = pr.pair_conditions(len(same), occ["test_ratios"], occ["test_regions"],
-                                  pr.dataset_seed(occ["test_seed"], "lfw"))
+    expected = pair_conditions(len(same), occ["test_ratios"], occ["test_regions"],
+                               dataset_seed(occ["test_seed"], "lfw"))
     path = resolve("results/masks/lfw_pair_occlusions.npz")
-    _check_hash(pr._file_hash(path), protocol["lfw_masks_sha256"], "LFW rectangles")
-    conditions = pr._fixed_conditions(path, expected)
+    _check_hash(file_sha256(path), protocol["lfw_masks_sha256"], "LFW rectangles")
+    conditions = load_fixed_conditions(path, expected)
     pairs = np.arange(2 * len(same)).reshape(-1, 2)
     folds = np.arange(len(same)) * 10 // len(same)
     return images, pairs, same, folds, conditions
@@ -85,11 +82,11 @@ def score_and_evaluate(dense, head, cfg, device, candidates, targets, order, box
     with Timer(device) as backward:
         banks = []
         for rows, rects in ((order[::2], None), (order[1::2], boxes)):
-            views = pr._views(candidates, targets, rows, rects, cfg["occlusion"]["fill"], device)
+            views = scoring_views(candidates, targets, rows, rects, cfg["occlusion"]["fill"], device)
             banks.append(taylor_scores(scorer, head, views))
     del scorer
     images, pairs, same, folds, conditions = benchmark
-    embed_kw = {**pr._embed_kw(cfg, device), "batch_size": 64}
+    embed_kw = {**embed_kwargs(cfg, device), "batch_size": 64}
     methods = {}
     for name in ("alpha_weighted", "condition_max"):
         with Timer(device) as aggregation:
@@ -98,14 +95,14 @@ def score_and_evaluate(dense, head, cfg, device, candidates, targets, order, box
             masks = layerwise_masks(scores, 0.5)
         model = copy.deepcopy(dense).eval()
         device_masks = apply_masks_(model, masks)
-        counts = pr._counts(model, head, device_masks)
+        counts = parameter_counts(model, head, device_masks)
         if (len(masks), counts["prunable_nonzero"], counts["prunable_total"]) != (19, 5578752, 11157504):
             raise ValueError("Unexpected sparsity or prunable layers")
         with Timer(device) as evaluation:
-            result = pr.evaluate_pairs(model, images, pairs, same, conditions, folds, **embed_kw)
+            result = evaluate_pairs(model, images, pairs, same, conditions, folds, **embed_kw)
         if any(not np.isfinite(s).all() for s in result["_sims"].values()):
             raise FloatingPointError("Non-finite LFW similarity")
-        metrics = pr._strip(result)
+        metrics = drop_per_pair(result)
         methods[name] = {
             "metrics": metrics, "parameters": counts, "region_mean_pct": 100 * np.mean([metrics[c]["acc"] for c in REGIONS]),
             "aggregation_seconds": aggregation.elapsed, "mask_seconds": masking.elapsed,
@@ -127,15 +124,15 @@ def rerun_calibration(*, checkpoint="checkpoints/dense_aug_seed42.pt", cache_dir
     study = resolve(STUDY_DIR)
     protocol = json.loads((study / "protocol.json").read_text(encoding="utf-8"))
     archive = study / "selection_orders.npz"
-    _check_hash(pr._file_hash(archive), protocol["selection_orders_sha256"], "Recorded selection orders")
+    _check_hash(file_sha256(archive), protocol["selection_orders_sha256"], "Recorded selection orders")
     checkpoint, cache = resolve(checkpoint), resolve(cache_dir)
-    _check_hash(pr._file_hash(checkpoint), protocol["checkpoint_sha256"], "Dense-Aug checkpoint")
-    dev = pr.get_device(device)
-    dense, head, meta = pr.load_checkpoint(checkpoint, dev, weights_only=True)
+    _check_hash(file_sha256(checkpoint), protocol["checkpoint_sha256"], "Dense-Aug checkpoint")
+    dev = get_device(device)
+    dense, head, meta = load_checkpoint(checkpoint, dev, weights_only=True)
     dense.eval()
     head.eval()
     cfg = meta["config"]
-    pr.set_seed(meta["seed"], cfg["train"]["deterministic"])
+    set_seed(meta["seed"], cfg["train"]["deterministic"])
     ids, candidates, targets, draws = _training_pool(cache, meta, protocol)
     benchmark = load_lfw(cache, cfg, protocol)
 

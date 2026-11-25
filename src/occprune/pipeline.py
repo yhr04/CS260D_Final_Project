@@ -1,12 +1,13 @@
 """Experiment pipeline (CASIA-WebFace training -> LFW verification): data preparation, dense training
 (Dense-Clean / Dense-Aug with CosFace), evaluation on clean and occluded pairs.
+Training primitives live in training.py; pruning experiments in prune_run.py.
 
 Notebook entry points (01_data, 02_dense_baselines):
 
     from occprune.pipeline import prepare_data, throughput_test, run_dense, summarize_dense
-    prepare_data(cfg)                    # caches, held-out split, fixed occlusions, stats, figure
-    throughput_test(cfg)                  # images/s of loader and training step
-    run_dense("clean", cfg)          # resumable; checkpoints every epoch
+    prepare_data(cfg)          # caches, held-out split, fixed occlusions, stats, figure
+    throughput_test(cfg)       # images/s of loader and training step
+    run_dense("clean", cfg)    # resumable; checkpoints every epoch
     run_dense("aug", cfg)
     table, figs = summarize_dense()
 
@@ -31,7 +32,6 @@ import torch.nn.functional as F
 from .data import (
     build_casia_cache,
     build_pairs_cache,
-    casia_paths,
     casia_split_path,
     check_casia_split,
     load_casia,
@@ -46,13 +46,16 @@ from .faceverif import (
     CosFaceHead,
     build_face_resnet18,
     dataset_seed,
+    drop_per_pair,
+    embed_kwargs,
     evaluate_pairs,
     pair_conditions,
     save_conditions,
 )
 from .occlusion import sample_train_boxes
+from .training import build_model, epoch_batches, lr_lambda, make_loader, param_groups, train_step
 from .transforms import preprocess
-from .utils import Timer, ensure_dir, env_info, get_device, get_logger, load_config, load_json, resolve, save_json, set_seed
+from .utils import Timer, ensure_dir, env_info, get_device, get_logger, load_config, load_json, resolve, save_json
 
 METHOD_NAME = {"clean": "Dense-Clean", "aug": "Dense-Aug"}
 COLORS = {"Dense-Clean": "#4C72B0", "Dense-Aug": "#DD8452"}
@@ -144,90 +147,6 @@ def prepare_data(cfg: dict | None = None, seed: int | None = None, workers: int 
     return stats
 
 
-# =============================================================================
-# loading
-# =============================================================================
-class MemmapBatches(torch.utils.data.Dataset):
-    """Item i = uint8 tensor (B,112,112,3) of the i-th precomputed index batch.
-    The memmap is opened lazily inside each DataLoader worker."""
-
-    def __init__(self, path: str, batches: list[np.ndarray]):
-        self.path, self.batches, self.arr = path, batches, None
-
-    def __len__(self):
-        return len(self.batches)
-
-    def __getitem__(self, i):
-        if self.arr is None:
-            self.arr = np.load(self.path, mmap_mode="r")
-        return torch.from_numpy(np.ascontiguousarray(self.arr[self.batches[i]]))
-
-
-def _loader(cfg, batches):
-    path = str(casia_paths(cfg["data"]["cache_dir"])["images"])
-    nw = cfg["data"]["num_workers"]
-    return torch.utils.data.DataLoader(
-        MemmapBatches(path, batches), batch_size=None, shuffle=False, num_workers=nw, pin_memory=True,
-        prefetch_factor=4 if nw > 0 else None, persistent_workers=False,
-    )
-
-
-def _epoch_batches(train_idx: np.ndarray, bs: int, g: torch.Generator) -> list[np.ndarray]:
-    perm = train_idx[torch.randperm(len(train_idx), generator=g).numpy()]
-    n = len(perm) // bs                                   # drop_last
-    return [np.sort(perm[s * bs : (s + 1) * bs]) for s in range(n)]   # sorted -> sequential disk reads
-
-
-# =============================================================================
-# training
-# =============================================================================
-def _param_groups(model: nn.Module, head: nn.Module, wd: float):
-    decay, no_decay = [], []
-    for p in list(model.parameters()) + list(head.parameters()):
-        (decay if p.ndim > 1 else no_decay).append(p)
-    return [{"params": decay, "weight_decay": wd}, {"params": no_decay, "weight_decay": 0.0}]
-
-
-def _lr_lambda(total: int, warmup: int):
-    def f(step):
-        if step < warmup:
-            return (step + 1) / warmup
-        t = (step - warmup) / max(1, total - warmup)
-        return 0.5 * (1.0 + math.cos(math.pi * min(t, 1.0)))
-    return f
-
-
-def _amp_dtype(name: str):
-    return {"bf16": torch.bfloat16, "fp16": torch.float16}.get(name)
-
-
-def _train_step(model, head, opt, sched, x8, y, boxes, flip, cfg):
-    tcfg = cfg["train"]
-    dt = _amp_dtype(tcfg["amp"])
-    x = preprocess(x8, boxes, cfg["occlusion"]["fill"], flip)
-    if tcfg["channels_last"]:
-        x = x.contiguous(memory_format=torch.channels_last)
-    with torch.autocast(device_type=x.device.type, dtype=dt, enabled=dt is not None):
-        emb = model(x)
-    logits, cos = head(emb, y)
-    loss = F.cross_entropy(logits, y)
-    opt.zero_grad(set_to_none=True)
-    loss.backward()
-    opt.step()
-    sched.step()
-    return loss.detach(), (cos.detach().argmax(1) == y).sum()
-
-
-def _build(cfg, n_cls, dev, seed):
-    mcfg, tcfg = cfg["model"], cfg["train"]
-    set_seed(seed, tcfg["deterministic"])           # identical initial head for clean / aug
-    model = build_face_resnet18(mcfg["embedding_dim"], pretrained=True).to(dev)
-    head = CosFaceHead(mcfg["embedding_dim"], n_cls, mcfg["scale"], mcfg["margin"]).to(dev)
-    if tcfg["channels_last"]:
-        model = model.to(memory_format=torch.channels_last)
-    return model, head
-
-
 def throughput_test(cfg: dict | None = None, steps: int = 60, mode: str = "aug", deterministic: bool | None = None) -> dict:
     """Measure loader-only and full-training-step throughput (images/s) on random batches."""
     cfg, seed = _cfg_seed(cfg, None)
@@ -239,26 +158,26 @@ def throughput_test(cfg: dict | None = None, steps: int = 60, mode: str = "aug",
     split = load_casia_split(seed)
     train_idx, ylab, n_cls = train_indices_and_labels(labels, split["holdout_ids"])
     g = torch.Generator().manual_seed(seed)
-    batches = _epoch_batches(train_idx, tcfg["batch_size"], g)[: steps + 10]
+    batches = epoch_batches(train_idx, tcfg["batch_size"], g)[: steps + 10]
     occ_rng = np.random.default_rng(0)
 
     t0 = time.perf_counter()
-    for i, xb in enumerate(_loader(cfg, batches[:steps])):
+    for i, xb in enumerate(make_loader(cfg, batches[:steps])):
         pass
     loader_ips = steps * tcfg["batch_size"] / (time.perf_counter() - t0)
 
-    model, head = _build(cfg, n_cls, dev, seed)
+    model, head = build_model(cfg, n_cls, dev, seed)
     model.train()
-    opt = torch.optim.SGD(_param_groups(model, head, tcfg["weight_decay"]), lr=tcfg["lr"], momentum=tcfg["momentum"])
-    sched = torch.optim.lr_scheduler.LambdaLR(opt, _lr_lambda(10**6, 10**3))
+    opt = torch.optim.SGD(param_groups(model, head, tcfg["weight_decay"]), lr=tcfg["lr"], momentum=tcfg["momentum"])
+    sched = torch.optim.lr_scheduler.LambdaLR(opt, lr_lambda(10**6, 10**3))
     times = []
-    for i, xb in enumerate(_loader(cfg, batches)):
+    for i, xb in enumerate(make_loader(cfg, batches)):
         x8 = xb.to(dev, non_blocking=True).permute(0, 3, 1, 2)
         y = torch.as_tensor(ylab[batches[i]], device=dev)
         boxes = sample_train_boxes(len(y), ocfg["train_prob"], tuple(ocfg["train_ratio"]), 112, 112, occ_rng) if mode == "aug" else None
         flip = torch.rand(len(y)) < 0.5
         with Timer(dev) as t:
-            _train_step(model, head, opt, sched, x8, y, boxes, flip, cfg)
+            train_step(model, head, opt, sched, x8, y, boxes, flip, cfg)
         times.append(t.elapsed)
     step_s = float(np.median(times[10:]))
     res = {
@@ -290,17 +209,6 @@ def _val_data(cfg, seed):
     pairs = inv.reshape(split["val_pairs"].shape)
     conds = pair_conditions(len(pairs), cfg["occlusion"]["val_ratios"], [], dataset_seed(cfg["occlusion"]["val_seed"], f"casia{seed}"))
     return imgs, pairs, split["val_issame"], split["fold"], conds
-
-
-def _embed_kw(cfg, dev):
-    t = cfg["train"]
-    return dict(device=dev, batch_size=t["eval_batch_size"], flip=t["eval_flip"], fill=cfg["occlusion"]["fill"],
-                amp=t["amp"], channels_last=t["channels_last"])
-
-
-def _strip(res: dict) -> dict:
-    """Drop per-pair arrays from evaluate_pairs output (kept separately in npz)."""
-    return {k: {m: v for m, v in r.items() if m != "correct"} for k, r in res.items() if not k.startswith("_")}
 
 
 def run_dense(
@@ -344,15 +252,15 @@ def run_dense(
     if max_train_images is not None:           # smoke tests only
         train_idx = np.sort(np.random.default_rng(0).choice(train_idx, max_train_images, replace=False))
     vimgs, vpairs, vsame, vfold, vconds = _val_data(cfg, seed)
-    ekw = _embed_kw(cfg, dev)
+    ekw = embed_kwargs(cfg, dev)
     logger.info(f"train {len(train_idx)} images / {n_cls} identities | val {len(vpairs)} pairs on "
                 f"{len(split['holdout_ids'])} held-out identities | conditions {list(vconds)}")
 
-    model, head = _build(cfg, n_cls, dev, seed)
+    model, head = build_model(cfg, n_cls, dev, seed)
     E, bs = tcfg["epochs"], tcfg["batch_size"]
     steps_per_epoch = len(train_idx) // bs
-    opt = torch.optim.SGD(_param_groups(model, head, tcfg["weight_decay"]), lr=tcfg["lr"], momentum=tcfg["momentum"])
-    sched = torch.optim.lr_scheduler.LambdaLR(opt, _lr_lambda(E * steps_per_epoch, int(tcfg["warmup_epochs"] * steps_per_epoch)))
+    opt = torch.optim.SGD(param_groups(model, head, tcfg["weight_decay"]), lr=tcfg["lr"], momentum=tcfg["momentum"])
+    sched = torch.optim.lr_scheduler.LambdaLR(opt, lr_lambda(E * steps_per_epoch, int(tcfg["warmup_epochs"] * steps_per_epoch)))
     g = torch.Generator().manual_seed(seed)            # batch order + flips
     occ_rng = np.random.default_rng([seed, 7])         # training occlusion boxes
     history, best, start_ep, train_time = [], {"score": -1.0, "epoch": -1}, 1, 0.0
@@ -374,12 +282,12 @@ def run_dense(
     for ep in range(start_ep, E + 1):
         model.train()
         head.train()
-        batches = _epoch_batches(train_idx, bs, g)
+        batches = epoch_batches(train_idx, bs, g)
         loss_sum = torch.zeros((), device=dev)
         correct = torch.zeros((), device=dev, dtype=torch.long)
         seen, n_occ, t_log = 0, 0, time.perf_counter()
         with Timer(dev) as t:
-            for s, xb in enumerate(_loader(cfg, batches)):
+            for s, xb in enumerate(make_loader(cfg, batches)):
                 bi = batches[s]
                 x8 = xb.to(dev, non_blocking=True).permute(0, 3, 1, 2)
                 y = torch.as_tensor(ylab[bi], device=dev)
@@ -388,7 +296,7 @@ def run_dense(
                     boxes = sample_train_boxes(len(bi), ocfg["train_prob"], tuple(ocfg["train_ratio"]), 112, 112, occ_rng)
                     n_occ += int((boxes[:, 2] > 0).sum())
                 flip = (torch.rand(len(bi), generator=g) < 0.5) if tcfg["hflip"] else None
-                loss, corr = _train_step(model, head, opt, sched, x8, y, boxes, flip, cfg)
+                loss, corr = train_step(model, head, opt, sched, x8, y, boxes, flip, cfg)
                 loss_sum += loss * len(bi)
                 correct += corr
                 seen += len(bi)
@@ -517,12 +425,12 @@ def evaluate_checkpoint(ckpt_path, cfg: dict | None = None, seed: int | None = N
     dcfg, ocfg = cfg["data"], cfg["occlusion"]
     dev = get_device(cfg["train"]["device"])
     model, head, meta = load_checkpoint(ckpt_path, dev)
-    ekw = _embed_kw(cfg, dev)
+    ekw = embed_kwargs(cfg, dev)
     log = logger.info if logger is not None else print
     out, sims = {"test": {}}, {}
     vimgs, vpairs, vsame, vfold, vconds = _val_data(cfg, seed)
     val = evaluate_pairs(model, vimgs, vpairs, vsame, vconds, vfold, **ekw)
-    out["val"] = _strip(val)
+    out["val"] = drop_per_pair(val)
     log("casia-val: " + " | ".join(f"{k} {v['acc']:.4f}" for k, v in out["val"].items()))
     with Timer(dev) as te:
         for name in dcfg["test_sets"]:
@@ -532,7 +440,7 @@ def evaluate_checkpoint(ckpt_path, cfg: dict | None = None, seed: int | None = N
             r = evaluate_pairs(model, d["images"], pairs, d["issame"], conds, None, **ekw)
             for c, s in r["_sims"].items():
                 sims[f"{name}/{c}"] = s
-            out["test"][name] = _strip(r)
+            out["test"][name] = drop_per_pair(r)
             log(f"{name}: " + " | ".join(f"{k} {v['acc'] * 100:.2f}+-{v['acc_std'] * 100:.2f}" for k, v in out["test"][name].items()))
     out["test_eval_time_s"] = te.elapsed
     out["train_diagnostics"] = train_diagnostics(model, head, cfg, seed)

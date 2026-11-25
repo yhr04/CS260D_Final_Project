@@ -215,9 +215,9 @@ $$S_j = (1-\alpha)\,\tilde I^{clean}_j + \alpha\,\tilde I^{occ}_j,\qquad \alpha 
 - **入口是 notebook**（`notebooks/`，中文说明，图表英文）；所有逻辑在 `src/occprune/`，notebook 只调用函数。
   - `01_data`：数据下载说明、缓存、留出划分、固定遮挡、吞吐测试（E0）
   - `02_dense_baselines`：Dense-Clean / Dense-Aug 训练与验证（E1）
-  - `03_pruning`：Magnitude 扫描与主对比（E2、E3、E5）
-  - `04_analysis`：重要性相关性与掩码重叠（E4）
-  - `05_ablations`：α、预算、打分种子、可选扩展（E6–E11）
+  - `03_pruning`：7 种方法的统一剪枝入口（`prune_run`），E2 扫描、E3 主对比、E5；E4 用 `prune_report.bank_agreement`
+  - `04_calibration_selection`：打分样本选择（coreset 类选择器 × 预算，E8 / E10）
+  - 之后的消融（α、打分种子等，E6、E7）沿用 `prune_run` 与 `prune_report`，新 notebook 依次编号
 - 训练时间长：notebook 中设置 `RETRAIN` 开关，训练每个 epoch 保存 checkpoint，可断点续训；也可在终端运行 `python -m occprune.pipeline train --mode aug`，不依赖 VS Code 窗口。
 - 所有超参数在 `configs/default.yaml`；结果 JSON 记录完整配置和软硬件版本。
 - `results/`、`figures/` 进 git；`data/`、`checkpoints/` 不进 git。

@@ -167,21 +167,27 @@ python -m occprune.pipeline train --mode aug      # with src on PYTHONPATH
 ## Layout
 
 ```
-configs/default.yaml      every hyper-parameter in one place
-src/occprune/
-  data.py                 zip -> uint8 memmap caches, held-out identity split + validation pairs, test-pair caches
-  faceverif.py            ResNet-18 embedding net, CosFace head, pair occlusions, embeddings, 10-fold verification
-  pipeline.py             prepare / throughput / resumable training / evaluation / summary (+ CLI)
-  occlusion.py            training-time square occlusion sampler (NumPy only)
-  transforms.py           uint8 -> [0,1] -> occlusion -> flip -> ImageNet normalisation
-  utils.py                seeds, device, synchronised timers, config, JSON, env info
-notebooks/                entry point (01 data, 02 dense baselines, 03 pruning, ...)
-tests/                    pytest quality checks
-results/                  JSON/CSV results, per-pair similarities, split, fixed occlusions, logs   (tracked)
-figures/                  PNG/PDF figures                                                          (tracked)
-checkpoints/, data/       model weights (see "Trained models"), downloads and caches               (git-ignored)
-requirements.txt          pinned versions for pip / conda
-pyproject.toml, uv.lock   same dependencies for uv
+configs/default.yaml        every hyper-parameter in one place (dense training + `prune` section)
+src/occprune/               see the module map in src/occprune/__init__.py
+  pipeline.py               data preparation, dense training / evaluation / summary (+ CLI)        notebooks 01, 02
+  prune_run.py              pruning runner: seven methods, shared calibration, fine-tuning (+ CLI)  notebook 03
+  calibration_ablation.py   calibration-photo selection study                                     notebook 04
+  prune_report.py           pruning tables, paired bootstrap, importance agreement
+  training.py               memmap batches, optimizer groups, lr schedule, CosFace step
+  protocol.py               split / checkpoint / occlusion integrity checks, calibration draw, counts
+  pruning.py                prunable layers, scores (Random, Magnitude, Taylor), OAGP aggregation, masks
+  calibration_selection.py  coreset-style calibration selectors (+ _sieve_selection.py)
+  faceverif.py              embedding net, CosFace head, pair occlusions, embeddings, 10-fold verification
+  data.py                   zip -> uint8 memmap caches, held-out identity split + validation pairs
+  occlusion.py, transforms.py, utils.py   occlusion sampler, preprocessing, config / seeds / timers / JSON
+notebooks/                  entry points (01 data, 02 dense baselines, 03 pruning, 04 calibration selection)
+scripts/                    standalone checks (verify_calibration_selection.py, NumPy only)
+tests/                      pytest quality checks
+results/                    JSON/CSV results, per-pair similarities, split, fixed occlusions, logs   (tracked)
+figures/                    PNG/PDF figures                                                          (tracked)
+checkpoints/, data/         model weights (see "Trained models"), downloads and caches               (git-ignored)
+requirements.txt            pinned versions for pip / conda
+pyproject.toml, uv.lock     same dependencies for uv
 ```
 
 ## Key protocol decisions

@@ -10,7 +10,8 @@ from torch import nn
 from occprune import pipeline
 from occprune.faceverif import CosFaceHead, dataset_seed, pair_conditions, verification_metrics
 from occprune.prune_report import bank_agreement, load_banks, load_runs, metrics_table, paired_bootstrap, summary_table
-from occprune.prune_run import METHODS, _checkpoint_split, run_pruning
+from occprune.protocol import verify_checkpoint_split
+from occprune.prune_run import METHODS, run_pruning
 from occprune.utils import load_config
 
 
@@ -95,6 +96,6 @@ def test_reject_split_with_correct_seed_but_different_identities(tmp_path):
     other = tmp_path / "different.npz"
     np.savez(other, seed=42, holdout_ids=[1, 2])
     with pytest.raises(ValueError, match="repository split"):
-        _checkpoint_split(other, {"seed": 42})
+        verify_checkpoint_split(other, {"seed": 42})
     with pytest.raises(ValueError, match="Split hash"):
-        _checkpoint_split(other, {"seed": 42, "split_sha256": "incorrect"})
+        verify_checkpoint_split(other, {"seed": 42, "split_sha256": "incorrect"})
