@@ -6,6 +6,26 @@ We ask whether **parameter importance estimated on both clean and synthetically 
 occluded-face verification accuracy better than conventional criteria (magnitude, clean-gradient Taylor) when a
 ResNet-18 face model is pruned to the same sparsity with the same gradient-scoring budget.
 
+## Results and notebooks
+
+| Experiment | Read the results | Open the notebook |
+| --- | --- | --- |
+| 50% one-shot pruning | [Dense-Aug, Magnitude, OAGP and OAGP-max](results/pruning/one_shot_seed42/README.md) | [03 · Run any of the seven pruning methods](notebooks/03_pruning.ipynb) |
+| Calibration photo selection for OAGP and OAGP-max | [Six selectors at 256, 512 and 1,024 photos](results/pruning/calibration_selection/README.md) | [04 · Explore results or rerun pruning](notebooks/04_calibration_selection.ipynb) |
+| Random pruning at 50% | [Accuracy by occlusion across three seeds](results/random50/lfw_summary.csv) | [03 · Random only](notebooks/03_random_pruning.ipynb) |
+| Dense baselines | [Dense-Clean and Dense-Aug verification results](results/baseline_table_seed42.md) | [02 · Train and evaluate](notebooks/02_dense_baselines.ipynb) |
+
+Notebook 04 opens the saved results without a GPU, weights or face images. To run pruning from the
+checkpoint, follow the [environment setup](#environment), [download the data](#data), build the cache
+with [01 · Data preparation](notebooks/01_data.ipynb) and get the [Dense-Aug weights](#trained-models).
+For implementation details, see the [pruning scores and masks](src/occprune/pruning.py),
+[calibration selectors](src/occprune/calibration_selection.py) and [default settings](configs/default.yaml).
+
+**Main finding.** With 50% layerwise sparsity and zero fine-tuning, Magnitude reached **94.93%** mean LFW
+verification accuracy across four held-out facial occlusions. At 1,024 calibration photos, Sieve-Streaming
+gave the highest mean among the six selectors for OAGP (**92.97%**) and OAGP-max (**93.87%**).
+On the 50%-area square alone, OAGP-max with Sieve reached **89.51%** and Magnitude reached **89.17%**.
+
 **Protocol** (as in the occluded-face-recognition literature, e.g. PDSN, FROM): train on **CASIA-WebFace**
 (112×112 aligned, 10.5K identities, 481K training images), test **face verification on LFW** (6000 pairs, standard
 10 folds) under clean and occluded conditions. Only the second image of each pair receives an occlusion.
@@ -41,6 +61,9 @@ figures `figures/dense_*`.
 
 Any Python 3.12 environment with the pinned libraries works (3.11–3.13 should too). Pick **one** option.
 
+<details>
+<summary>Installation commands for pip, conda or uv</summary>
+
 **pip + venv**
 ```bash
 python -m venv .venv
@@ -63,10 +86,15 @@ pip install -r requirements.txt
 uv sync
 ```
 
+</details>
+
 Check: `python -m pytest -q` and
 `python -c "import torch; print(torch.__version__, torch.cuda.is_available())"`.
 
-**Notebook kernel.** In VS Code open the **repository folder** itself, open a notebook, then
+<details>
+<summary>Select the notebook kernel in VS Code</summary>
+
+In VS Code open the **repository folder** itself, open a notebook, then
 *Select Kernel → Python Environments* and pick the environment you just created. If it is not listed,
 reload the window (`Ctrl+Shift+P` → *Developer: Reload Window*), or register it once as a named kernel
 from inside that environment:
@@ -76,6 +104,8 @@ python -m ipykernel install --user --name cs260d --display-name "CS260D"
 and choose *Select Kernel → Jupyter Kernel… → CS260D*. The first cell of each notebook prints the Python
 path in use; it must be the environment you installed into. The notebooks add `src/` to `sys.path`
 themselves, so the project package does not need to be installed.
+
+</details>
 
 ## Data
 
@@ -109,20 +139,13 @@ release: `.pt` files are unpickled. The data (previous section) is still needed 
 
 ## Running experiments
 
-The notebooks are the entry point; run them top to bottom. Explanations inside are in Chinese; figures,
+Run the [notebooks](#results-and-notebooks) top to bottom. Explanations are in Chinese. Figures,
 tables and logs are in English for the report.
-
-| Notebook | What it does |
-|---|---|
-| `notebooks/01_data.ipynb` | cache build, held-out identity split + validation pairs, fixed test occlusions, figure, throughput (`prepare_data`) |
-| `notebooks/02_dense_baselines.ipynb` | Dense-Clean / Dense-Aug training (`run_dense`, resumable), LFW table, figures, paired bootstrap, gradient diagnostics |
-| `notebooks/03_pruning.ipynb` | Random, Magnitude, Clean/Occ/Mixed-Taylor, OAGP, OAGP-max on one Dense-Aug model with shared calibration and fixed masks (`run_pruning`), summary tables, paired bootstrap |
-| [04_calibration_selection.ipynb](notebooks/04_calibration_selection.ipynb) | Compare six ways to select the calibration photos for OAGP and OAGP-max at budgets of 256, 512 and 1,024. View the measured results or reproduce a pruning run. |
 
 ### Pruning runs
 
-All seven methods run through one command; scores are computed once and reused for every sparsity
-(see the docstring of `src/occprune/prune_run.py` for the shared calibration design):
+The [pruning runner](src/occprune/prune_run.py) supports Random, Magnitude, Clean-Taylor, Occ-Taylor,
+Mixed-Taylor, OAGP and OAGP-max. It computes each score once and reuses it at every sparsity.
 
 ```bash
 python -m occprune.prune_run --checkpoint checkpoints/dense_aug_seed42.pt --output results/pruning/runs/e3_score42     --sparsity 0.7 0.8 --scoring-seed 42 --ft-epochs 1 --test-set lfw
@@ -133,14 +156,6 @@ Defaults (B=1024, α=0.5, fine-tuning lr 0.01 with cosine decay) live in the `pr
 Each output directory holds `result.json` and `pair_similarities.npz` (tracked) plus `condition_scores.npz`
 and `masks.npz` (large, git-ignored). `occprune.prune_report` builds the tables (`metrics_table`,
 `summary_table`), paired bootstrap CIs and the clean-vs-occluded importance analysis (`bank_agreement`).
-The first 50% one-shot comparison (earlier runner, Magnitude / OAGP / OAGP-max, three scoring seeds) is in
-[`results/pruning/one_shot_seed42/`](results/pruning/one_shot_seed42/README.md).
-
-At 50% layerwise sparsity and zero fine-tuning, Magnitude reached **94.93%** mean LFW verification
-accuracy across four held-out facial occlusions. The best measured calibration strategy at 1,024
-images was Sieve-Streaming for both OAGP (**92.97%**) and OAGP-max (**93.87%**).
-OAGP-max with Sieve reached **89.51%** under a 50%-area square occlusion, compared with **89.17%**
-for Magnitude on that condition. [Results by seed, budget and occlusion](results/pruning/calibration_selection/README.md)
 
 All logic lives in `src/occprune/`; notebooks only call it. In notebook 02, `RETRAIN = True` retrains (otherwise
 saved results are reused). Hyper-parameters come from `configs/default.yaml` and can be overridden in the
