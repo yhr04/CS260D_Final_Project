@@ -9,7 +9,10 @@ from torch import nn
 
 from occprune import pipeline
 from occprune.faceverif import CosFaceHead, dataset_seed, pair_conditions, verification_metrics
-from occprune.prune_report import bank_agreement, load_banks, load_runs, metrics_table, paired_bootstrap, summary_table
+from occprune.prune_report import (
+    bank_agreement, load_banks, load_runs, metrics_table, paired_bootstrap, summary_table, write_alpha_report,
+    write_grid_report,
+)
 from occprune.protocol import verify_checkpoint_split
 from occprune.prune_run import METHODS, run_pruning
 from occprune.utils import load_config
@@ -88,6 +91,13 @@ def test_paired_pruning_run_and_saved_results(tmp_path, monkeypatch):
     assert set(banks) == {"clean_A", "clean_B", "occ_A", "occ_B"}
     agree = bank_agreement(dest, sparsities=(0.5,))
     assert list(agree.index) == ["conv2"] and -1 <= agree.spearman.iloc[0] <= 1
+    written = write_grid_report([str(dest)], tmp_path / "report", bank_sparsities=(0.5,))
+    for key in ("metrics_long", "validation_one_shot", "validation_fine_tuned", "bank_agreement"):
+        assert written[key].is_file()
+    assert (tmp_path / "report" / "sparsity_validation_one_shot.png").is_file()
+    alpha = write_alpha_report([str(dest)], tmp_path / "alpha")
+    assert all(p.is_file() for p in alpha.values())
+    assert "Selected on validation squares" in alpha["markdown"].read_text(encoding="utf-8")
     with pytest.raises(FileExistsError):
         run_pruning(ckpt, dest, **kwargs)
 
