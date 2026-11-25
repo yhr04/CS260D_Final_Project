@@ -1,0 +1,2 @@
+# Keep published CSV checksums stable on Windows checkouts.
+*.csv text eol=lf
