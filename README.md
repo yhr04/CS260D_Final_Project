@@ -8,8 +8,9 @@ ResNet-18 face model is pruned to the same sparsity with the same gradient-scori
 
 **Protocol** (as in the occluded-face-recognition literature, e.g. PDSN, FROM): train on **CASIA-WebFace**
 (112×112 aligned, 10.5K identities, 481K training images), test **face verification on LFW** (6000 pairs, standard
-10 folds) with the second image of every pair occluded — random squares (10/30/50% of the image, same distribution
-as training occlusion) and template-based regions never seen in training (eyes, mouth+nose, upper / lower half).
+10 folds) under clean and occluded conditions. Only the second image of each pair receives an occlusion.
+Test squares cover 10%, 30% or 50% of the image, with 10–30% used for training augmentation.
+Four template-based regions are held out from training (eyes, mouth+nose, upper / lower half).
 AgeDB-30, CALFW and CPLFW are supplementary test sets.
 
 Project plan, experimental design and timeline: [`docs/PROJECT_PLAN.md`](docs/PROJECT_PLAN.md) (Chinese).
@@ -21,7 +22,7 @@ Project plan, experimental design and timeline: [`docs/PROJECT_PLAN.md`](docs/PR
 | E0 | Data download, memmap cache, held-out validation pairs, fixed test occlusions, throughput | done |
 | E1 | Dense-Clean / Dense-Aug (ResNet-18 + CosFace), clean + occluded verification | done (seed 42) |
 | E2–E4 | Pruning: all 7 methods in one runner (`prune_run`), sparsity sweep, main comparison, importance analysis | runner done; first 50% one-shot comparison done |
-| E5+ | Region occlusions, α / budget ablations, optional extensions | planned |
+| E5+ | Region occlusions, α / budget ablations, optional extensions | calibration selection and budget comparison complete at 50% sparsity; α sweep planned |
 
 ## Dense baseline results (seed 42, LFW verification accuracy, %)
 
@@ -116,6 +117,7 @@ tables and logs are in English for the report.
 | `notebooks/01_data.ipynb` | cache build, held-out identity split + validation pairs, fixed test occlusions, figure, throughput (`prepare_data`) |
 | `notebooks/02_dense_baselines.ipynb` | Dense-Clean / Dense-Aug training (`run_dense`, resumable), LFW table, figures, paired bootstrap, gradient diagnostics |
 | `notebooks/03_pruning.ipynb` | Random, Magnitude, Clean/Occ/Mixed-Taylor, OAGP, OAGP-max on one Dense-Aug model with shared calibration and fixed masks (`run_pruning`), summary tables, paired bootstrap |
+| [04_calibration_selection.ipynb](notebooks/04_calibration_selection.ipynb) | Compare six ways to select the calibration photos for OAGP and OAGP-max at budgets of 256, 512 and 1,024. View the measured results or reproduce a pruning run. |
 
 ### Pruning runs
 
@@ -133,6 +135,12 @@ and `masks.npz` (large, git-ignored). `occprune.prune_report` builds the tables 
 `summary_table`), paired bootstrap CIs and the clean-vs-occluded importance analysis (`bank_agreement`).
 The first 50% one-shot comparison (earlier runner, Magnitude / OAGP / OAGP-max, three scoring seeds) is in
 [`results/pruning/one_shot_seed42/`](results/pruning/one_shot_seed42/README.md).
+
+At 50% layerwise sparsity and zero fine-tuning, Magnitude reached **94.93%** mean LFW verification
+accuracy across four held-out facial occlusions. The best measured calibration strategy at 1,024
+images was Sieve-Streaming for both OAGP (**92.97%**) and OAGP-max (**93.87%**).
+OAGP-max with Sieve reached **89.51%** under a 50%-area square occlusion, compared with **89.17%**
+for Magnitude on that condition. [Results by seed, budget and occlusion](results/pruning/calibration_selection/README.md)
 
 All logic lives in `src/occprune/`; notebooks only call it. In notebook 02, `RETRAIN = True` retrains (otherwise
 saved results are reused). Hyper-parameters come from `configs/default.yaml` and can be overridden in the

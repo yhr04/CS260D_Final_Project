@@ -1,0 +1,87 @@
+{
+  "primary_outcome": "Arithmetic mean LFW verification accuracy over eyes, mouth_nose, upper_half and lower_half at B=1024; paired contrasts by calibration seed.",
+  "training_seed": 42,
+  "scoring_seeds": [
+    42,
+    43,
+    44
+  ],
+  "budgets": [
+    256,
+    512,
+    1024
+  ],
+  "selectors": [
+    "random",
+    "coreset",
+    "kcenter",
+    "greedi",
+    "greedy_merge",
+    "sieve"
+  ],
+  "pruning_methods": [
+    "alpha_weighted",
+    "condition_max"
+  ],
+  "layerwise_sparsity": 0.5,
+  "prunable_layers": "19 non-stem Conv2d weight tensors",
+  "fine_tuning_steps": 0,
+  "alpha": 0.5,
+  "checkpoint": "dense_aug_seed42.pt",
+  "checkpoint_sha256": "d8248b5dda150101f1b80188ad58d5b9b23977abd1843e58657f0cd5ef001bc3",
+  "split_sha256": "9f4057a3cd3aa2a8d466886e4a27d575e8b39dce659931c9bc9a3fb625474c95",
+  "lfw_masks_sha256": "7d09e90500ee7ef1947064fb2447b28eb5f08b71cd417c61ee47fa942403392e",
+  "candidate_pool_sha256": "a6695be8c8237ae32e47d8ee4dbfca6dc555877fb474ebe23bb9286e9252ae1f",
+  "labels_sha256": "7632ad3e3c015d38d82dcb40ecc5fad6e7d86c3382f976ce8450d100f4b60d3e",
+  "pixels_sha256": "91643d5ac985df2ec55bbd26f522ea5c7981e6feb3f392d2af0ba71e8d8fd9a6",
+  "candidate_count": 3071,
+  "candidate_identities": 2318,
+  "pool_hash_encoding": "Array SHA-256 digests use C-contiguous bytes. Candidate IDs and remapped labels are little-endian int64 in ascending source-index order. Pixels are decoded (3071,112,112,3) uint8 RGB.",
+  "selection_archive_schema": "pool_original_ids are source indices into the sorted CASIA cache. <selector>/<seed>/<budget> is a uint16 vector of positions in this pool, alternating clean and occluded. boxes/<seed> contains 512 int32 (y0,x0,side) CASIA training squares; slice the first B/2 rows.",
+  "embedding": {
+    "sha256": "1ecf869f2da6a46f60d050e7d0399e4f3891060927f2ef023be40bb0deb28a1e",
+    "dimension": 512,
+    "amp": "off",
+    "flip": false,
+    "batch_size": 64,
+    "similarity": "(1 + cosine) / 2 in float64 after unit normalization"
+  },
+  "distributed": {
+    "partitions": 2,
+    "permutation": "numpy.random.default_rng(scoring_seed).permutation(candidate_count)",
+    "reference_pool": "all candidates for all shard gains",
+    "greedy_merge": "equal quotas; serpentine shard order to balance view assignments"
+  },
+  "sieve": {
+    "epsilon": 0.2,
+    "objective": "residual mean facility location after fixing the common first center",
+    "fill_images_in_recorded_runs": 0
+  },
+  "environment": {
+    "device": "mps",
+    "python": "3.11.5",
+    "numpy": "1.26.4",
+    "torch": "2.8.0",
+    "torchvision": "0.23.0",
+    "scikit_learn": "1.5.2",
+    "eval_amp": "bf16",
+    "eval_flip": true,
+    "eval_batch_size": 64
+  },
+  "selection_orders_sha256": "212e1db337390ab311f4f360f7026573830cfd6c13ab22cfb1cb1bf4843ddea8",
+  "exact_facility_order_check": {
+    "description": "Direct all-candidate argmax and exact per-shard max reduction independently matched the recorded lazy order for each of 1,023 greedy steps after the common start. Order hashes use original source indices as little-endian int64.",
+    "ordered_original_ids_sha256": {
+      "42": "03d5f505d6a0b82fb76e23eaacd923e437f340c8f3ea22ff3ca8681ca0bcb4fd",
+      "43": "10892e04e791dbe1805d0e8ef73e2b1568c2398f5ae54b2af0838f0463cddd16",
+      "44": "62b02c3ac4d1507281e39e6e8ff2e556e26612a19b5d147cacaa1655ddeea36c"
+    }
+  },
+  "public_artifacts_sha256": {
+    "pair_similarities.npz": "1a8359f221bd49c41eab4856b863a949353e6fd55084bdbf973899e255e45e13",
+    "paired_seed_metrics.csv": "009d3cc5ed7c36dfc1a86e67ecec92916c494c7ee102b2ad2df6e9f18d18a2d8",
+    "coverage_and_timing.csv": "7ba73f1a91238b61ad71f254223226b2c2b828291dc70da591fff2b10bc862a2",
+    "held_out_region_accuracy.png": "e7965be64600d6fb8366d9596a7192ba39b34e12105c6c0527fbb6d4d99ad662",
+    "selection_orders.npz": "212e1db337390ab311f4f360f7026573830cfd6c13ab22cfb1cb1bf4843ddea8"
+  }
+}
